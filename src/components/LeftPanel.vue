@@ -1,32 +1,137 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
+import { Window } from '@tauri-apps/api/window';
+import { info } from '@tauri-apps/plugin-log';
+import { open } from '@tauri-apps/plugin-dialog'; // 引入 dialog API
+import { readDir } from '@tauri-apps/plugin-fs'; // 引入 fs API
+import settingsManager from '../utils/settingsManager'; // 引入设置管理器
 
 // 左侧面板组件
 const stayOnTop = ref(false);
+info(`stayOnTop变量初始化: ${stayOnTop.value}`);
 const searchText = ref("搜索歌曲...");
 const midiFiles = ref<string[]>(["测试歌曲-忘记时间-胡歌.mid"]);
+const allMidiFiles = ref<string[]>(["测试歌曲-忘记时间-胡歌.mid"]); // 用于存储所有MIDI文件
 const selectedFile = ref<string>("");
 
 // 窗口置顶切换
-const toggleStayOnTop = () => {
-  stayOnTop.value = !stayOnTop.value;
-  // 这里需要调用Tauri API来实现窗口置顶
+const toggleStayOnTop = async () => {
+  try {
+    const currentWindow = Window.getCurrent();
+    info('获取当前窗口实例成功');
+    
+    // 首先获取当前的实际状态
+    const currentState = await currentWindow.isAlwaysOnTop();
+    info(`获取到的当前实际窗口状态: ${currentState}`);
+    
+    // 计算目标状态（与当前状态相反）
+    const targetState = !currentState;
+    info(`准备切换窗口置顶状态到: ${targetState}`);
+    
+    // 设置新状态
+    await currentWindow.setAlwaysOnTop(targetState);
+    info(`窗口置顶状态已设置为: ${targetState}`);
+    
+    // 验证设置是否生效
+    const verificationState = await currentWindow.isAlwaysOnTop();
+    info(`验证后的窗口置顶状态: ${verificationState}`);
+    
+    // 更新本地状态变量
+    stayOnTop.value = verificationState;
+    info(`本地stayOnTop变量已更新为: ${stayOnTop.value}`);
+  } catch (error) {
+    info(`切换窗口置顶状态失败: ${error}`);
+    // 出错时重新获取实际状态以保持同步
+    try {
+      const currentWindow = Window.getCurrent();
+      const actualState = await currentWindow.isAlwaysOnTop();
+      stayOnTop.value = actualState;
+      info(`出错后同步的实际窗口状态: ${actualState}`);
+    } catch (syncError) {
+      info(`同步实际状态失败: ${syncError}`);
+    }
+  }
 };
 
+// 组件挂载时检查窗口当前置顶状态
+onMounted(async () => {
+  info('组件挂载，开始检查窗口置顶状态和加载MIDI文件夹');
+  try {
+    const currentWindow = Window.getCurrent();
+    info('获取当前窗口实例成功');
+    const currentState = await currentWindow.isAlwaysOnTop();
+    info(`获取到的初始窗口置顶状态: ${currentState}`);
+    stayOnTop.value = currentState;
+
+    // 加载保存的MIDI文件夹路径
+    const savedFolderPath = await settingsManager.loadMidiFolderPath();
+    if (savedFolderPath) {
+      info(`加载到保存的MIDI文件夹路径: ${savedFolderPath}`);
+      await loadMidiFiles(savedFolderPath);
+    } else {
+      info('未找到保存的MIDI文件夹路径');
+    }
+  } catch (error) {
+    info(`组件挂载时操作失败: ${error}`);
+  }
+});
+
 // 选择MIDI文件夹
-const selectDirectory = () => {
-  // 这里需要调用Tauri API来选择文件夹
+const selectDirectory = async () => {
+  try {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "选择MIDI文件夹",
+    });
+
+    if (selected) {
+      const folderPath = selected as string;
+      info(`选择了文件夹: ${folderPath}`);
+      // 保存文件夹路径到配置
+      await settingsManager.saveMidiFolderPath(folderPath);
+      await loadMidiFiles(folderPath);
+    }
+  } catch (error) {
+    info(`选择文件夹或读取文件失败: ${error}`);
+  }
 };
 
 // 搜索歌曲
 const filterSongs = () => {
-  // 实现搜索逻辑
+  const query = searchText.value.toLowerCase();
+  if (query === "" || query === "搜索歌曲...") {
+    midiFiles.value = allMidiFiles.value;
+  } else {
+    midiFiles.value = allMidiFiles.value.filter(file =>
+      file.toLowerCase().includes(query)
+    );
+  }
 };
 
 // 歌曲选中
 const songSelected = (file: string) => {
   selectedFile.value = file;
   // 通知父组件更新选中的MIDI文件
+};
+
+// 加载MIDI文件列表
+const loadMidiFiles = async (folderPath: string) => {
+  try {
+    const entries = await readDir(folderPath);
+    const midiFilesList = entries
+      .filter((entry) => entry.name?.endsWith(".mid") || entry.name?.endsWith(".midi"))
+      .map((entry) => entry.name as string)
+      .sort(); // 按名称排序
+
+    allMidiFiles.value = midiFilesList; // 更新所有MIDI文件列表
+    midiFiles.value = allMidiFiles.value; // 将所有文件显示在列表中
+    info(`从 ${folderPath} 找到 ${midiFilesList.length} 个MIDI文件`);
+  } catch (error) {
+    info(`读取MIDI文件失败: ${error}`);
+    allMidiFiles.value = [];
+    midiFiles.value = []; // 清空列表
+  }
 };
 </script>
 

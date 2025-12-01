@@ -1,5 +1,5 @@
 import { appDataDir, configDir } from '@tauri-apps/api/path';
-import { exists, readTextFile, writeTextFile, create, mkdir } from '@tauri-apps/plugin-fs';
+import { exists, readTextFile, writeTextFile, mkdir } from '@tauri-apps/plugin-fs';
 import { info, error, warn } from '@tauri-apps/plugin-log';
 import { platform } from '@tauri-apps/plugin-os';
 
@@ -26,6 +26,7 @@ interface AppSettings {
     noteToKey: Record<number, string>;
   };
   shortcuts?: Record<string, string>;
+  midiFolderPath?: string; // Add this line
 }
 
 class SettingsManager {
@@ -34,7 +35,8 @@ class SettingsManager {
     themeSettings: {
       currentTheme: 'default'
     },
-    shortcuts: {}
+    shortcuts: {},
+    midiFolderPath: undefined, // Initialize the new property
   };
 
   constructor() {
@@ -141,7 +143,9 @@ class SettingsManager {
         shortcuts: {
           ...currentSettings.shortcuts,
           ...(settings.shortcuts || {})
-        }
+        },
+        // 合并 midiFolderPath
+        midiFolderPath: settings.midiFolderPath !== undefined ? settings.midiFolderPath : currentSettings.midiFolderPath,
       };
       info(`更新后的配置: ${JSON.stringify(updatedSettings)}`);
 
@@ -313,6 +317,15 @@ class SettingsManager {
       info('返回默认主题以确保应用正常运行');
       return this.defaultSettings.themeSettings.currentTheme;
     }
+  }
+
+  async saveMidiFolderPath(path: string): Promise<void> {
+    await this.saveSettings({ midiFolderPath: path });
+  }
+
+  async loadMidiFolderPath(): Promise<string | undefined> {
+    const settings = await this.loadSettings();
+    return settings.midiFolderPath;
   }
 }
 

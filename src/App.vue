@@ -61,7 +61,7 @@ provide('currentTheme', currentTheme);
 
 <template>
   <div class="app-container">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏
     <header class="app-header">
       <h1>OpenGamesAutoPlay</h1>
       <div class="theme-selector">
@@ -72,12 +72,12 @@ provide('currentTheme', currentTheme);
         </select>
       </div>
     </header>
-    
+    -->
     <!-- 主内容区 -->
     <main class="main-content">
       <!-- 左侧面板 -->
       <LeftPanel />
-      
+
       <!-- 右侧面板 -->
       <RightPanel />
     </main>
