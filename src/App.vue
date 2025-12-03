@@ -4,7 +4,7 @@ import themeConfig from "./config/theme.json";
 import LeftPanel from "./components/LeftPanel.vue";
 import RightPanel from "./components/RightPanel.vue";
 import settingsManager from "./utils/settingsManager";
-import { error } from '@tauri-apps/plugin-log';
+import { error, info } from '@tauri-apps/plugin-log';
 
 // 主题管理
 const currentTheme = ref("default");
@@ -19,13 +19,13 @@ const changeTheme = async (themeName: string) => {
   if (theme) {
     colors.value = theme;
     updateCSSVariables(theme);
-    
+
     // 保存主题设置
-      try {
-        await settingsManager.saveTheme(themeName);
-        } catch (err) {
-          error(`保存主题失败: ${err}`);
-      }
+    try {
+      await settingsManager.saveTheme(themeName);
+    } catch (err) {
+      error(`[App.vue:21] 保存主题失败: ${err}`);
+    }
   }
 };
 
@@ -39,25 +39,35 @@ const updateCSSVariables = (theme: any) => {
   });
 };
 
-// 初始化主题
+// 初始化应用
 onMounted(async () => {
   try {
-    // 从设置文件加载主题
-    const savedTheme = await settingsManager.loadTheme();
+    info('[App.vue:32] 开始初始化应用...');
+
+    // 1. 初始化配置管理器（只调用一次，从文件读取配置到内存）
+    await settingsManager.initialize();
+    info('[App.vue:43] 配置管理器初始化完成');
+
+    // 2. 从内存加载主题
+    const savedTheme = settingsManager.loadTheme();
+    info(`[App.vue:54] 加载的主题: ${savedTheme}`);
     currentTheme.value = savedTheme;
     const theme = themes.find(t => t.name === savedTheme) || themes[0];
     colors.value = theme;
     updateCSSVariables(theme);
-    } catch (err) {
-      error(`加载主题失败: ${err}`);
+
+    info('[App.vue:65] 应用初始化完成');
+  } catch (err) {
+    error(`[App.vue:76] 初始化失败: ${err}`);
     // 使用默认主题
     updateCSSVariables(colors.value);
   }
 });
 
-// 提供主题更新方法给子组件
+// 提供主题更新方法和配置管理器给子组件
 provide('updateTheme', changeTheme);
 provide('currentTheme', currentTheme);
+provide('settingsManager', settingsManager);
 </script>
 
 <template>
@@ -104,7 +114,7 @@ provide('currentTheme', currentTheme);
   --inputfg: #343a40;
   --inputbg: #ffffff;
   --active: #e9ecef;
-  
+
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
   line-height: 24px;

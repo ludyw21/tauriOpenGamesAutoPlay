@@ -5,8 +5,9 @@ fn parse_midi(
     file_path: &str,
     min_note: u8,
     max_note: u8,
+    black_key_mode: &str,
 ) -> Result<midi_analyzer::MidiAnalysis, String> {
-    midi_analyzer::analyze_midi_file(file_path, min_note, max_note)
+    midi_analyzer::analyze_midi_file(file_path, min_note, max_note, black_key_mode)
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/

@@ -3,11 +3,10 @@ import { ref, reactive, computed, inject, watch } from "vue";
 import Dialog from "../common/Dialog.vue";
 import themeConfig from "../../config/theme.json";
 import { info } from '@tauri-apps/plugin-log';
-import { useSettingsStore } from "../../store/settings";
 import { GROUPS, NOTE_NAMES } from "../../config/groups";
 
-// 使用 SettingsStore
-const settingsStore = useSettingsStore();
+// 从 App.vue 注入 settingsManager
+const settingsManager = inject('settingsManager') as any;
 
 // 从父组件注入主题相关方法和状态
 const updateTheme = inject<(themeName: string) => Promise<void>>('updateTheme');
@@ -47,19 +46,19 @@ const localThemeSettings = reactive({
 
 // 初始化本地状态
 const initLocalState = () => {
-  const state = settingsStore.state;
+  const settings = settingsManager.getSettings();
 
-  localKeySettings.minNote = state.keySettings.minNote;
-  localKeySettings.maxNote = state.keySettings.maxNote;
-  localKeySettings.blackKeyMode = state.keySettings.blackKeyMode;
-  localKeySettings.noteToKey = { ...state.keySettings.noteToKey };
+  localKeySettings.minNote = settings.keySettings?.minNote || 48;
+  localKeySettings.maxNote = settings.keySettings?.maxNote || 83;
+  localKeySettings.blackKeyMode = settings.keySettings?.blackKeyMode || "support_black_key";
+  localKeySettings.noteToKey = { ...(settings.keySettings?.noteToKey || {}) };
 
-  localShortcuts.START_PAUSE = state.shortcuts.START_PAUSE;
-  localShortcuts.STOP = state.shortcuts.STOP;
-  localShortcuts.PREV_SONG = state.shortcuts.PREV_SONG;
-  localShortcuts.NEXT_SONG = state.shortcuts.NEXT_SONG;
+  localShortcuts.START_PAUSE = settings.shortcuts?.START_PAUSE || "alt+-";
+  localShortcuts.STOP = settings.shortcuts?.STOP || "alt+=";
+  localShortcuts.PREV_SONG = settings.shortcuts?.PREV_SONG || "alt+up";
+  localShortcuts.NEXT_SONG = settings.shortcuts?.NEXT_SONG || "alt+down";
 
-  localThemeSettings.currentTheme = state.themeSettings.currentTheme;
+  localThemeSettings.currentTheme = settings.themeSettings?.currentTheme || "default";
 
   // 初始化下拉框选择
   updateDropdownsFromNote('min', localKeySettings.minNote);
@@ -67,11 +66,10 @@ const initLocalState = () => {
 };
 
 // 监听可见性变化，初始化数据
-watch(() => props.visible, async (newVal) => {
+watch(() => props.visible, (newVal) => {
   if (newVal) {
-    await settingsStore.init();
     initLocalState();
-    info("加载设置");
+    info("[SettingsDialog.vue:74] 加载设置");
   }
 });
 
@@ -93,8 +91,7 @@ const presetConfigs = [
 // 黑键模式选项
 const blackKeyModes = [
   { value: "support_black_key", label: "支持黑键" },
-  { value: "auto_sharp", label: "自动升号" },
-  { value: "no_black_key", label: "无黑键" }
+  { value: "auto_sharp", label: "黑键降音" }
 ];
 
 // 音符分组数据
@@ -174,21 +171,34 @@ watch([maxNoteGroup, maxNoteValue], ([newGroup, newNote]) => {
 
 // 保存设置
 const saveSettings = async () => {
+  // 保存前获取旧的 keySettings
+  const oldSettings = settingsManager.getSettings();
+  const oldKeySettings = oldSettings.keySettings || {};
+
   const settings = {
     keySettings: { ...localKeySettings },
     shortcuts: { ...localShortcuts },
     themeSettings: { ...localThemeSettings }
   };
 
-  // 保存到 store
-  await settingsStore.save(settings);
+  // 保存到 settingsManager
+  await settingsManager.saveSettings(settings);
 
   // 更新主题
   if (updateTheme && localThemeSettings.currentTheme !== currentTheme?.value) {
     await updateTheme(localThemeSettings.currentTheme);
   }
 
-  emit("settingsSaved", settings);
+  // 检测 keySettings 是否变更
+  const keySettingsChanged =
+    oldKeySettings.minNote !== localKeySettings.minNote ||
+    oldKeySettings.maxNote !== localKeySettings.maxNote ||
+    oldKeySettings.blackKeyMode !== localKeySettings.blackKeyMode;
+
+  emit("settingsSaved", {
+    settings,
+    keySettingsChanged
+  });
   emit("update:visible", false);
 };
 
@@ -199,7 +209,7 @@ const cancelSettings = () => {
 
 // 应用预设配置
 const applyPresetConfig = (presetId: string) => {
-  info(`应用预设配置: ${presetId}`);
+  info("[SettingsDialog.vue:201] 应用预设配置: " + presetId);
   const preset = presetConfigs.find(p => p.id === presetId);
   if (preset) {
     localKeySettings.minNote = preset.minNote;

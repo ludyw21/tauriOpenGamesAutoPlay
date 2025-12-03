@@ -6,7 +6,7 @@ interface HelpDialogProps {
   visible: boolean;
 }
 
-const props = defineProps<HelpDialogProps>();
+defineProps<HelpDialogProps>();
 const emit = defineEmits<{
   (e: "update:visible", value: boolean): void;
 }>();

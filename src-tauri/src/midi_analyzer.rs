@@ -4,6 +4,38 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+// Black and white key pitch classes (matching Python implementation)
+const BLACK_PCS: [u8; 5] = [1, 3, 6, 8, 10]; // C#, D#, F#, G#, A#
+const WHITE_PCS: [u8; 7] = [0, 2, 4, 5, 7, 9, 11]; // C, D, E, F, G, A, B
+
+/// Find the nearest white key pitch class for a given pitch class
+/// Uses "nearest" strategy: finds the white key with minimum absolute distance
+fn nearest_white_pc(pc: u8) -> u8 {
+    let pc = pc % 12;
+
+    // If already a white key, return as-is
+    if WHITE_PCS.contains(&pc) {
+        return pc;
+    }
+
+    // Find the nearest white key by minimum distance
+    let mut best_pc = 0;
+    let mut best_dist = 12;
+
+    for &white_pc in &WHITE_PCS {
+        let dist = std::cmp::min(
+            (pc as i32 - white_pc as i32).abs(),
+            (white_pc as i32 - pc as i32).abs(),
+        );
+        if dist < best_dist {
+            best_dist = dist;
+            best_pc = white_pc;
+        }
+    }
+
+    best_pc
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MidiEvent {
     pub time: f64,
@@ -125,6 +157,7 @@ pub fn analyze_midi_file(
     file_path: &str,
     min_note: u8,
     max_note: u8,
+    black_key_mode: &str,
 ) -> Result<MidiAnalysis, String> {
     let path = Path::new(file_path);
     if !path.exists() {
@@ -380,6 +413,23 @@ pub fn analyze_midi_file(
             .partial_cmp(&b.time)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    // Apply black key mode conversion if enabled
+    // This matches the Python implementation in midi_analyzer.py lines 529-541
+    if black_key_mode == "auto_sharp" {
+        for event in &mut events {
+            let note = event.note;
+            let pc = note % 12;
+
+            // Check if this is a black key
+            if BLACK_PCS.contains(&pc) {
+                // Find the nearest white key pitch class
+                let new_pc = nearest_white_pc(pc);
+                // Keep the octave, only change the pitch class
+                event.note = (note - pc) + new_pc;
+            }
+        }
+    }
 
     // Analyze min/max
     let mut min_note = None;

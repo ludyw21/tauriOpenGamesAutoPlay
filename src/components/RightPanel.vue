@@ -1,36 +1,29 @@
 ```vue
 <script setup lang="ts">
-import { ref, defineProps, watch, onMounted, computed } from "vue";
+import { ref, defineProps, watch, onMounted, computed, inject } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import EventTableDialog from "./dialogs/EventTableDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
 import { info, error } from '@tauri-apps/plugin-log';
 import { getNoteName, groupForNote } from "../config/groups";
-import { useSettingsStore } from "../store/settings";
 
 const props = defineProps({
   selectedMidiFile: { type: [String, null], default: null },
 });
 
-// 使用 SettingsStore
-const settingsStore = useSettingsStore();
+// 从 App.vue 注入 settingsManager
+const settingsManager = inject('settingsManager') as any;
 
 // 右侧面板组件
 const currentMinNote = ref(48);
 const currentMaxNote = ref(83);
 
-// 初始化 store
-onMounted(async () => {
-  await settingsStore.init();
-  currentMinNote.value = settingsStore.state.keySettings.minNote;
-  currentMaxNote.value = settingsStore.state.keySettings.maxNote;
+// 初始化时从 settingsManager 获取配置
+onMounted(() => {
+  const settings = settingsManager.getSettings();
+  currentMinNote.value = settings.keySettings?.minNote || 48;
+  currentMaxNote.value = settings.keySettings?.maxNote || 83;
 });
-
-// 监听 store 变化
-watch(() => settingsStore.state.keySettings, (newSettings) => {
-  currentMinNote.value = newSettings.minNote;
-  currentMaxNote.value = newSettings.maxNote;
-}, { deep: true });
 
 const remainingTime = ref("00:00");
 const allTracksSelected = ref(true);
@@ -79,20 +72,25 @@ watch(() => props.selectedMidiFile, async (newFile) => {
     displayFileName.value = newFile.split(/[/\\]/).pop() || newFile;
 
     try {
-      info(`正在解析MIDI文件: ${newFile}`);
+      info("[RightPanel.vue:22] 正在解析MIDI文件: " + newFile);
 
       // 从设置中获取min/max note
-      const settingsStore = useSettingsStore();
-      const minNote = settingsStore.state.keySettings.minNote;
-      const maxNote = settingsStore.state.keySettings.maxNote;
+      const settings = settingsManager.getSettings();
+      const minNote = settings.keySettings?.minNote || 48;
+      const maxNote = settings.keySettings?.maxNote || 83;
+
+      // 更新当前显示的范围（确保界面显示正确的范围）
+      currentMinNote.value = minNote;
+      currentMaxNote.value = maxNote;
 
       // 传递min/max note给后端
       const result: any = await invoke("parse_midi", {
         filePath: newFile,
         minNote: minNote,
-        maxNote: maxNote
+        maxNote: maxNote,
+        blackKeyMode: settings.keySettings?.blackKeyMode || "support_black_key"
       });
-      info("解析成功");
+      info("[RightPanel.vue:33] 解析成功");
 
       // 更新分析结果
       // 注意：这里不再覆盖 currentMinNote/MaxNote，因为它们由用户设置决定
@@ -124,7 +122,7 @@ watch(() => props.selectedMidiFile, async (newFile) => {
       }
 
     } catch (e) {
-      error(`解析MIDI失败: ${e}`);
+      error(`[RightPanel.vue:44] 解析MIDI失败: ${e}`);
       tracks.value = [];
       midiEvents.value = [];
       originalMidiEvents.value = [];
@@ -175,7 +173,7 @@ const toggleSelectAll = () => {
   tracks.value.forEach(track => {
     track.selected = allTracksSelected.value;
   });
-  info(`全选状态更新: ${allTracksSelected.value ? '全选' : '取消全选'}，当前选中${tracks.value.filter(t => t.selected).length}个音轨`);
+  info(`[RightPanel.vue:55] 全选状态更新: ${allTracksSelected.value ? '全选' : '取消全选'}，当前选中${tracks.value.filter(t => t.selected).length}个音轨`);
 };
 
 // 切换音轨选择
@@ -185,7 +183,7 @@ const toggleTrackSelection = (trackId: number) => {
     // 不需要手动切换状态，因为v-model已经处理了
     // 只需要更新全选状态
     allTracksSelected.value = tracks.value.every(t => t.selected);
-    info(`音轨${trackId}选择状态: ${track.selected ? '选中' : '取消选中'}`);
+    info(`[RightPanel.vue:66] 音轨${trackId}选择状态: ${track.selected ? '选中' : '取消选中'}`);
   }
 };
 
@@ -222,20 +220,20 @@ const resetTranspose = (trackId: number) => {
 
 // 重新分析音轨（转音设置变更后）
 const reanalyzeTrack = (track: Track) => {
-  info(`开始重新分析音轨${track.id}, 移调${track.transpose}, 转位${track.octave}`);
+  info(`[RightPanel.vue:77] 开始重新分析音轨${track.id}, 移调${track.transpose}, 转位${track.octave}`);
 
   // 调试：检查前几个事件的结构
   if (originalMidiEvents.value.length > 0) {
     const sampleEvents = originalMidiEvents.value.slice(0, 5);
-    info(`样本事件: ${JSON.stringify(sampleEvents.map(e => ({ track: e.track, type: e.type, note: e.note })))}`);
+    info(`[RightPanel.vue:88] 样本事件: ${JSON.stringify(sampleEvents.map(e => ({ track: e.track, type: e.type, note: e.note })))}`);
   }
 
   // 获取该音轨的所有原始音符事件（只要note_on事件）
   const trackEvents = originalMidiEvents.value.filter(e => e.track === track.id && e.type === 'note_on');
-  info(`音轨${track.id}的原始note_on事件数量: ${trackEvents.length}, 总原始事件: ${originalMidiEvents.value.length}`);
+  info(`[RightPanel.vue:99] 音轨${track.id}的原始note_on事件数量: ${trackEvents.length}, 总原始事件: ${originalMidiEvents.value.length}`);
 
   if (trackEvents.length === 0) {
-    info(`音轨${track.id}没有note_on事件，跳过分析`);
+    info(`[RightPanel.vue:1010] 音轨${track.id}没有note_on事件，跳过分析`);
     return;
   }
 
@@ -244,9 +242,9 @@ const reanalyzeTrack = (track: Track) => {
   const adjustedNotes = trackEvents.map(e => e.note + adjustment);
 
   // 从设置中获取限制值
-  const settingsStore = useSettingsStore();
-  const limit_min = settingsStore.state.keySettings.minNote;
-  const limit_max = settingsStore.state.keySettings.maxNote;
+  const settings = settingsManager.getSettings();
+  const limit_min = settings.keySettings?.minNote || 48;
+  const limit_max = settings.keySettings?.maxNote || 83;
 
   // 重新计算分析
   const max_note = Math.max(...adjustedNotes);
@@ -299,7 +297,7 @@ const reanalyzeTrack = (track: Track) => {
     suggested_min_octave,
   };
 
-  info(`音轨${track.id}重新分析完成: ${min_note}-${max_note}, 移调${track.transpose}, 转位${track.octave}`);
+  info(`[RightPanel.vue:1111] 音轨${track.id}重新分析完成: ${min_note}-${max_note}, 移调${track.transpose}, 转位${track.octave}`);
 };
 
 // 优化移调建议（前端版本）
@@ -356,12 +354,12 @@ const toggleMidiPlayback = async () => {
 
 const startMidiPlayback = async () => {
   if (!props.selectedMidiFile) {
-    error('没有选择MIDI文件');
+    error('[RightPanel.vue:1212] 没有选择MIDI文件');
     return;
   }
 
   try {
-    info('开始加载MIDI播放器...');
+    info('[RightPanel.vue:1313] 开始加载MIDI播放器...');
 
     // 动态导入Tone.js
     const Tone = await import('tone');
@@ -385,18 +383,18 @@ const startMidiPlayback = async () => {
       }
     }).toDestination();
 
-    info('开始播放MIDI...');
+    info('[RightPanel.vue:1414] 开始播放MIDI...');
     isPlayingMidi.value = true;
 
     // 启动Tone.js音频上下文
     if (Tone.context.state !== 'running') {
       await Tone.start();
     }
-    info(`Tone context state: ${Tone.context.state}`);
+    info(`[RightPanel.vue:1515] Tone context state: ${Tone.context.state}`);
 
     // 计算总时长
     if (midiEvents.value.length === 0) {
-      error('没有MIDI事件可播放');
+      error('[RightPanel.vue:1616] 没有MIDI事件可播放');
       stopMidiPlayback();
       return;
     }
@@ -407,12 +405,12 @@ const startMidiPlayback = async () => {
     // 调度所有音符
     const now = Tone.now();
     const startTimeOffset = 0.5; // 延迟0.5秒开始播放，给调度留出时间
-    info(`Current Tone time: ${now}, Scheduling start at: ${now + startTimeOffset}`);
+    info(`[RightPanel.vue:1717] Current Tone time: ${now}, Scheduling start at: ${now + startTimeOffset}`);
     let scheduledCount = 0;
 
     midiEvents.value.forEach((event, index) => {
       if (index < 3) {
-        info(`Event ${index}: type=${event.type}, note=${event.note}, time=${event.time}, duration=${event.duration}`);
+        info(`[RightPanel.vue:1818] Event ${index}: type=${event.type}, note=${event.note}, time=${event.time}, duration=${event.duration}`);
       }
       if (event.type === 'note_on' && event.note && event.velocity > 0) {
         try {
@@ -432,12 +430,12 @@ const startMidiPlayback = async () => {
           scheduledCount++;
         } catch (e) {
           // 忽略单个音符的错误
-          error(`Error scheduling note: ${e}`);
+          error(`[RightPanel.vue:1919] Error scheduling note: ${e}`);
         }
       }
     });
 
-    info(`成功调度${scheduledCount}个音符`);
+    info(`[RightPanel.vue:2020] 成功调度${scheduledCount}个音符`);
 
     // 启动倒计时
     playbackTimer = window.setInterval(() => {
@@ -448,22 +446,22 @@ const startMidiPlayback = async () => {
     }, 1000);
 
   } catch (e) {
-    error(`MIDI播放失败: ${e}`);
+    error(`[RightPanel.vue:2121] MIDI播放失败: ${e}`);
     stopMidiPlayback();
   }
 };
 
 const stopMidiPlayback = async () => {
-  info('停止MIDI播放');
+  info('[RightPanel.vue:2222] 停止MIDI播放');
 
   // 停止合成器
   if (toneSynth) {
     try {
       toneSynth.dispose();
       toneSynth = null;
-      info('合成器已销毁');
+      info('[RightPanel.vue:2323] 合成器已销毁');
     } catch (e) {
-      info(`停止合成器时出错: ${e}`);
+      info(`[RightPanel.vue:2424] 停止合成器时出错: ${e}`);
     }
   }
 
@@ -478,15 +476,15 @@ const stopMidiPlayback = async () => {
 
 // const testSound = async () => {
 //   try {
-//     info('Testing sound...');
+//     info('[RightPanel.vue:2525] Testing sound...');
 //     const Tone = await import('tone');
 //     await Tone.start();
-//     info(`Tone context state: ${Tone.context.state}`);
+//     info(`[RightPanel.vue:2626] Tone context state: ${Tone.context.state}`);
 //     const synth = new Tone.Synth().toDestination();
 //     synth.triggerAttackRelease("C4", "8n");
-//     info("Test sound played");
+//     info("[RightPanel.vue:2727] Test sound played");
 //   } catch (e) {
-//     error(`Test sound failed: ${e}`);
+//     error(`[RightPanel.vue:2828] Test sound failed: ${e}`);
 //   }
 // };
 
@@ -518,9 +516,55 @@ const showHelp = () => {
 };
 
 // 处理设置保存
-const handleSettingsSaved = (settings: any) => {
-  info(`设置已保存: ${JSON.stringify(settings)}`);
-  // 设置已通过 store 更新，这里不需要额外操作
+const handleSettingsSaved = async (payload: any) => {
+  info(`[RightPanel.vue:2929] 设置已保存`);
+
+  // 检查 keySettings 是否变更
+  if (payload.keySettingsChanged) {
+    info('[RightPanel.vue] keySettings 已变更，更新当前显示范围');
+
+    // 更新当前显示的 min/max note
+    const newSettings = settingsManager.getSettings();
+    currentMinNote.value = newSettings.keySettings?.minNote || 48;
+    currentMaxNote.value = newSettings.keySettings?.maxNote || 83;
+
+    // 如果有选中的 MIDI 文件，重新解析
+    if (props.selectedMidiFile) {
+      info(`[RightPanel.vue] 检测到 keySettings 变更且有选中文件，重新解析: ${props.selectedMidiFile}`);
+      try {
+        const result: any = await invoke("parse_midi", {
+          filePath: props.selectedMidiFile,
+          minNote: currentMinNote.value,
+          maxNote: currentMaxNote.value,
+          blackKeyMode: newSettings.keySettings?.blackKeyMode || "support_black_key"
+        });
+
+        // 更新事件数据
+        if (result.events) {
+          originalMidiEvents.value = JSON.parse(JSON.stringify(result.events));
+          midiEvents.value = result.events;
+        }
+
+        // 更新音轨列表
+        if (result.tracks) {
+          tracks.value = result.tracks.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            noteCount: t.note_count,
+            selected: true,
+            transpose: 0,
+            octave: 0,
+            analysis: t.analysis
+          }));
+          allTracksSelected.value = true;
+        }
+
+        info('[RightPanel.vue] MIDI 文件重新解析完成');
+      } catch (e) {
+        error(`[RightPanel.vue] 重新解析 MIDI 失败: ${e}`);
+      }
+    }
+  }
 };
 
 // 格式化音轨分析文本（返回对象，包含可点击部分）
@@ -571,17 +615,17 @@ const applySuggestion = (track: Track, type: 'max' | 'min') => {
   const analysis = track.analysis;
   if (!analysis) return;
 
-  info(`开始应用建议: 音轨${track.id}, 类型${type}`);
+  info(`[RightPanel.vue:3030] 开始应用建议: 音轨${track.id}, 类型${type}`);
 
   if (type === 'max' && analysis.suggested_max_transpose !== null && analysis.suggested_max_octave !== null) {
     track.transpose = analysis.suggested_max_transpose;
     track.octave = analysis.suggested_max_octave;
-    info(`应用最高音建议: 移调${track.transpose}, 转位${track.octave}`);
+    info(`[RightPanel.vue:3131] 应用最高音建议: 移调${track.transpose}, 转位${track.octave}`);
     reanalyzeTrack(track);
   } else if (type === 'min' && analysis.suggested_min_transpose !== null && analysis.suggested_min_octave !== null) {
     track.transpose = analysis.suggested_min_transpose;
     track.octave = analysis.suggested_min_octave;
-    info(`应用最低音建议: 移调${track.transpose}, 转位${track.octave}`);
+    info(`[RightPanel.vue:3232] 应用最低音建议: 移调${track.transpose}, 转位${track.octave}`);
     reanalyzeTrack(track);
   }
 };

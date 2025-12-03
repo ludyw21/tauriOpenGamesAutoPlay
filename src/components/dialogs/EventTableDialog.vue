@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, inject, watch } from "vue";
 import Dialog from "../common/Dialog.vue";
 import { info } from '@tauri-apps/plugin-log';
 import { getNoteName, groupForNote } from "../../config/groups";
-import { useSettingsStore } from "../../store/settings";
 
 interface EventData {
   time: number;
@@ -25,27 +24,17 @@ const emit = defineEmits<{
   (e: "update:visible", value: boolean): void;
 }>();
 
-// 使用 SettingsStore
-const settingsStore = useSettingsStore();
+// 从 App.vue 注入 settingsManager
+const settingsManager = inject('settingsManager') as any;
+
+// 获取设置
+const settings = settingsManager.getSettings();
+const currentMinNote = ref(settings.keySettings?.minNote || 48);
+const currentMaxNote = ref(settings.keySettings?.maxNote || 83);
 
 // 状态
 const showOnlyOutOfRange = ref(false);
 const events = computed(() => props.events || []);
-const currentMinNote = ref(48);
-const currentMaxNote = ref(83);
-
-// 初始化 store 并获取设置
-onMounted(async () => {
-  await settingsStore.init();
-  currentMinNote.value = settingsStore.state.keySettings.minNote;
-  currentMaxNote.value = settingsStore.state.keySettings.maxNote;
-});
-
-// 监听 store 变化
-watch(() => settingsStore.state.keySettings, (newSettings) => {
-  currentMinNote.value = newSettings.minNote;
-  currentMaxNote.value = newSettings.maxNote;
-}, { deep: true });
 
 // 计算超限音符数量（只统计note_on事件）
 const outOfRangeCount = computed(() => {
@@ -90,25 +79,25 @@ const toggleDisplay = () => {
 // 导出事件CSV
 const exportEventCsv = () => {
   // 实现导出CSV逻辑
-  info("导出事件CSV");
+  info("[EventTableDialog.vue] 导出事件CSV");
 };
 
 // 导出按键谱
-const exportKeyNotation = () => {
-  // 实现导出按键谱逻辑
-  info("导出按键谱");
-};
+// const exportKeyNotation = () => {
+//   // 实现导出按键谱逻辑
+//   info("[EventTableDialog.vue] 导出按键谱");
+// };
 
 // 双击事件处理
 const handleEventDoubleClick = (event: EventData) => {
   // 实现双击事件处理逻辑
-  info(`双击事件: ${JSON.stringify(event)}`);
+  info(`[EventTableDialog.vue] 双击事件: ${JSON.stringify(event)}`);
 };
 
 // 监听可见性变化，初始化数据
 watch(() => props.visible, (newVal) => {
   if (newVal) {
-    info(`打开事件表，事件数量: ${props.events?.length || 0}`);
+    info(`[EventTableDialog.vue] 打开事件表，事件数量: ${props.events?.length || 0}`);
   }
 });
 </script>
@@ -118,7 +107,7 @@ watch(() => props.visible, (newVal) => {
     <!-- 工具栏 -->
     <div class="event-toolbar">
       <button class="btn btn-small" @click="exportEventCsv">导出事件CSV</button>
-      <button class="btn btn-small" @click="exportKeyNotation">导出按键谱</button>
+      <!-- <button class="btn btn-small" @click="exportKeyNotation">导出按键谱</button> -->
 
       <div class="toolbar-right">
         <span class="out-of-range-count">超限音符数量：{{ outOfRangeCount }}</span>

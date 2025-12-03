@@ -174,7 +174,6 @@ tauriOpenGamesAutoPlay/
 ## 🙏 致谢
 
 - [Auto-play](https://github.com/nexply/Auto-play) - 文件读取、按键映射、基础布局等部分
-- [MeowField_AutoPiano](https://github.com/Tsundeer/MeowField_AutoPiano) - 界面风格、midi事件解析等部分
 - [tauri](https://tauri.app/) - 跨平台桌面应用框架
 - [tone.js](https://tonejs.org/) - midi音频播放
 
