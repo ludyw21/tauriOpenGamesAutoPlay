@@ -1,9 +1,10 @@
 ```vue
 <script setup lang="ts">
-import { ref, defineProps, watch, onMounted, computed, inject } from "vue";
+import { ref, defineProps, watch, onMounted, onUnmounted, computed, inject } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import EventTableDialog from "./dialogs/EventTableDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
+import HelpDialog from "./dialogs/HelpDialog.vue";
 import { info, error } from '@tauri-apps/plugin-log';
 import { getNoteName, groupForNote } from "../config/groups";
 
@@ -23,6 +24,14 @@ onMounted(() => {
   const settings = settingsManager.getSettings();
   currentMinNote.value = settings.keySettings?.minNote || 48;
   currentMaxNote.value = settings.keySettings?.maxNote || 83;
+});
+
+// 组件卸载时清理
+onUnmounted(() => {
+  // 停止MIDI播放（包括预览）
+  if (isPlayingMidi.value) {
+    stopMidiPlayback();
+  }
 });
 
 const remainingTime = ref("00:00");
@@ -331,12 +340,62 @@ const stopPlayback = () => {
   // 实现停止逻辑
 };
 
-const togglePreview = () => {
-  // 实现预览逻辑
+// 预览功能
+const togglePreview = async () => {
+  if (isPreviewing.value || isPlayingMidi.value) {
+    // 停止预览或播放
+    stopMidiPlayback();
+  } else {
+    // 开始预览
+    await startPreview();
+  }
+};
+
+const startPreview = async () => {
+  // 1. 检查是否有选中的MIDI文件
+  if (!props.selectedMidiFile) {
+    error('[RightPanel.vue] 没有选择MIDI文件');
+    return;
+  }
+
+  // 2. 过滤有效事件（非超限音符）
+  const validEvents = midiEvents.value.filter(event => {
+    if (event.type !== 'note_on') return false;
+    const note = event.note;
+    // 只保留在范围内的音符
+    return note >= currentMinNote.value && note <= currentMaxNote.value;
+  });
+
+  // 3. 检查是否有有效事件
+  if (validEvents.length === 0) {
+    error('[RightPanel.vue] 没有有效的音符可预览（所有音符都超限）');
+    return;
+  }
+
+  info(`[RightPanel.vue] 预览模式：过滤后有${validEvents.length}个有效音符，原始${midiEvents.value.filter(e => e.type === 'note_on').length}个音符`);
+
+  // 4. 临时保存原始事件
+  const originalEvents = midiEvents.value;
+
+  // 5. 替换为过滤后的事件
+  midiEvents.value = validEvents;
+
+  // 6. 调用现有的播放逻辑
+  try {
+    await startMidiPlayback();
+    isPreviewing.value = true;
+    info('[RightPanel.vue] 预览播放已启动');
+  } catch (e) {
+    error(`[RightPanel.vue] 预览播放失败: ${e}`);
+    // 恢复原始事件
+    midiEvents.value = originalEvents;
+    isPreviewing.value = false;
+  }
 };
 
 // MIDI播放相关状态
 const isPlayingMidi = ref(false);
+const isPreviewing = ref(false); // 预览模式状态
 const midiRemainingTime = ref(0);
 let toneSynth: any = null; // 使用非响应式变量避免 Vue Proxy 干扰 Tone.js
 
@@ -471,6 +530,7 @@ const stopMidiPlayback = async () => {
     playbackTimer = null;
   }
   isPlayingMidi.value = false;
+  isPreviewing.value = false; // 重置预览状态
   midiRemainingTime.value = 0;
 };
 
@@ -768,7 +828,7 @@ const applySuggestion = (track: Track, type: 'max' | 'min') => {
 
 /* 通用框架样式 */
 .tracks-frame,
-.operation-frame,
+.controls-frame,
 .other-frame {
   background-color: var(--bg);
   border: 1px solid var(--border);

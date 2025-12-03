@@ -3,7 +3,8 @@ import { ref, reactive, computed, inject, watch } from "vue";
 import Dialog from "../common/Dialog.vue";
 import themeConfig from "../../config/theme.json";
 import { info } from '@tauri-apps/plugin-log';
-import { GROUPS, NOTE_NAMES } from "../../config/groups";
+import { GROUPS, NOTE_NAMES, getNoteName } from "../../config/groups";
+import { NOTE_TO_KEY } from "../../config/keyboard_mapping";
 
 // 从 App.vue 注入 settingsManager
 const settingsManager = inject('settingsManager') as any;
@@ -83,9 +84,25 @@ const themeOptions = computed(() => {
 
 // 预设配置选项
 const presetConfigs = [
-  { id: "default", name: "默认配置", minNote: 48, maxNote: 83 },
-  { id: "basic", name: "基础模式", minNote: 40, maxNote: 87 },
-  { id: "advanced", name: "高级模式", minNote: 21, maxNote: 108 }
+  {
+    id: "36key",
+    name: "燕云十六声(36键)",
+    minNote: 48,
+    maxNote: 83,
+    blackKeyMode: "support_black_key",
+    noteToKey: { ...NOTE_TO_KEY }
+  },
+  {
+    id: "21key",
+    name: "燕云十六声(21键)",
+    minNote: 48,
+    maxNote: 83,
+    blackKeyMode: "auto_sharp",
+    // 21键模式下，只保留不含组合键的映射（即单键）
+    noteToKey: Object.fromEntries(
+      Object.entries(NOTE_TO_KEY).filter(([_, key]) => !key.includes('+'))
+    )
+  }
 ];
 
 // 黑键模式选项
@@ -169,11 +186,95 @@ watch([maxNoteGroup, maxNoteValue], ([newGroup, newNote]) => {
   }
 });
 
+// 计算需要显示的音符列表（按分组）
+const displayNoteGroups = computed(() => {
+  const groups: { name: string; notes: { note: number; name: string; key: string }[] }[] = [];
+  const min = localKeySettings.minNote;
+  const max = localKeySettings.maxNote;
+  const blackKeyMode = localKeySettings.blackKeyMode;
+
+  // 遍历所有分组
+  for (const [groupName, [lo, hi]] of Object.entries(GROUPS)) {
+    // 检查分组是否在范围内
+    if (hi < min || lo > max) continue;
+
+    const notesInGroup: { note: number; name: string; key: string }[] = [];
+    const start = Math.max(lo, min);
+    const end = Math.min(hi, max);
+
+    for (let i = start; i <= end; i++) {
+      // 如果是自动降音模式，且是黑键，则跳过
+      if (blackKeyMode === 'auto_sharp') {
+        const noteIndex = i % 12;
+        const isBlackKey = [1, 3, 6, 8, 10].includes(noteIndex);
+        if (isBlackKey) continue;
+      }
+
+      const noteName = getNoteName(i);
+      // 获取按键映射：优先使用本地设置，如果没有则使用默认映射，再没有则为空
+      const key = localKeySettings.noteToKey[i] !== undefined
+        ? localKeySettings.noteToKey[i]
+        : (NOTE_TO_KEY[i] || '');
+
+      notesInGroup.push({
+        note: i,
+        name: `${noteName} (${i})`,
+        key: key
+      });
+    }
+
+    if (notesInGroup.length > 0) {
+      groups.push({
+        name: groupName,
+        notes: notesInGroup
+      });
+    }
+  }
+
+  // 按音高排序分组 (GROUPS对象的键序可能不保证顺序，这里简单按第一个音符排序)
+  groups.sort((a, b) => a.notes[0].note - b.notes[0].note);
+
+  return groups;
+});
+
+// 更新按键映射
+const updateNoteKey = (note: number, key: string) => {
+  localKeySettings.noteToKey[note] = key;
+};
+
 // 保存设置
 const saveSettings = async () => {
   // 保存前获取旧的 keySettings
   const oldSettings = settingsManager.getSettings();
   const oldKeySettings = oldSettings.keySettings || {};
+
+  // 确保 noteToKey 包含当前范围内所有的按键配置（包括默认值）
+  const fullNoteToKey: Record<number, string> = {};
+  const min = localKeySettings.minNote;
+  const max = localKeySettings.maxNote;
+  const blackKeyMode = localKeySettings.blackKeyMode;
+
+  for (let i = min; i <= max; i++) {
+    // 如果是自动降音模式，且是黑键，则跳过保存
+    if (blackKeyMode === 'auto_sharp') {
+      const noteIndex = i % 12;
+      const isBlackKey = [1, 3, 6, 8, 10].includes(noteIndex);
+      if (isBlackKey) continue;
+    }
+
+    // 获取有效按键：优先使用本地设置，如果没有则使用默认映射
+    // 注意：如果用户显式清空了按键（值为""），也会被保留
+    const key = localKeySettings.noteToKey[i] !== undefined
+      ? localKeySettings.noteToKey[i]
+      : (NOTE_TO_KEY[i] || '');
+
+    if (key !== undefined) {
+      fullNoteToKey[i] = key;
+    }
+  }
+
+  // 更新本地状态中的 noteToKey，以便保存
+  localKeySettings.noteToKey = fullNoteToKey;
 
   const settings = {
     keySettings: { ...localKeySettings },
@@ -214,6 +315,10 @@ const applyPresetConfig = (presetId: string) => {
   if (preset) {
     localKeySettings.minNote = preset.minNote;
     localKeySettings.maxNote = preset.maxNote;
+    localKeySettings.blackKeyMode = preset.blackKeyMode;
+    // 更新映射
+    localKeySettings.noteToKey = { ...preset.noteToKey };
+
     updateDropdownsFromNote('min', preset.minNote);
     updateDropdownsFromNote('max', preset.maxNote);
   }
@@ -256,7 +361,7 @@ watch(() => currentTheme?.value, (newVal) => {
       <!-- 按键设置标签页 -->
       <div v-if="activeTab === 'keys'" class="keys-tab">
         <!-- 预设配置 -->
-        <div class="setting-section">
+        <div class="setting-section preset-config-section">
           <h4 class="section-title">预设配置</h4>
           <div class="preset-buttons">
             <button v-for="preset in presetConfigs" :key="preset.id" class="btn btn-small"
@@ -266,57 +371,72 @@ watch(() => currentTheme?.value, (newVal) => {
           </div>
         </div>
 
-        <!-- 音符范围设置 -->
+        <!-- 基础配置 -->
         <div class="setting-section">
-          <h4 class="section-title">音符范围设置</h4>
-          <div class="range-controls-row">
-            <!-- 最低音 -->
-            <div class="range-control-group">
-              <label>最低音：</label>
-              <div class="cascade-select">
-                <select v-model="minNoteGroup" class="setting-select group-select">
-                  <option v-for="group in groupOptions" :key="group.value" :value="group.value">
-                    {{ group.label }}
-                  </option>
-                </select>
-                <select v-model="minNoteValue" class="setting-select note-select">
-                  <option v-for="note in getNotesInGroup(minNoteGroup)" :key="note.value" :value="note.value">
-                    {{ note.label }}
-                  </option>
-                </select>
+          <h4 class="section-title">基础配置</h4>
+          <div class="basic-config-container">
+            <!-- 左侧：音域设置 (2/3) -->
+            <div class="range-settings">
+              <!-- 最低音 -->
+              <div class="range-control-group">
+                <label>最低音：</label>
+                <div class="cascade-select">
+                  <select v-model="minNoteGroup" class="setting-select group-select">
+                    <option v-for="group in groupOptions" :key="group.value" :value="group.value">
+                      {{ group.label }}
+                    </option>
+                  </select>
+                  <select v-model="minNoteValue" class="setting-select note-select">
+                    <option v-for="note in getNotesInGroup(minNoteGroup)" :key="note.value" :value="note.value">
+                      {{ note.label }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 最高音 -->
+              <div class="range-control-group">
+                <label>最高音：</label>
+                <div class="cascade-select">
+                  <select v-model="maxNoteGroup" class="setting-select group-select">
+                    <option v-for="group in groupOptions" :key="group.value" :value="group.value">
+                      {{ group.label }}
+                    </option>
+                  </select>
+                  <select v-model="maxNoteValue" class="setting-select note-select">
+                    <option v-for="note in getNotesInGroup(maxNoteGroup)" :key="note.value" :value="note.value">
+                      {{ note.label }}
+                    </option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <!-- 最高音 -->
-            <div class="range-control-group">
-              <label>最高音：</label>
-              <div class="cascade-select">
-                <select v-model="maxNoteGroup" class="setting-select group-select">
-                  <option v-for="group in groupOptions" :key="group.value" :value="group.value">
-                    {{ group.label }}
-                  </option>
-                </select>
-                <select v-model="maxNoteValue" class="setting-select note-select">
-                  <option v-for="note in getNotesInGroup(maxNoteGroup)" :key="note.value" :value="note.value">
-                    {{ note.label }}
-                  </option>
-                </select>
+            <!-- 右侧：黑键设置 (1/3) -->
+            <div class="black-key-settings">
+              <div class="radio-group">
+                <label class="radio-label" v-for="mode in blackKeyModes" :key="mode.value">
+                  <input type="radio" v-model="localKeySettings.blackKeyMode" :value="mode.value">
+                  {{ mode.label }}
+                </label>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 黑键模式 -->
+        <!-- 按键配置 -->
         <div class="setting-section">
-          <h4 class="section-title">黑键设置</h4>
-          <div class="black-key-settings">
-            <div class="control-group">
-              <label>模式：</label>
-              <select v-model="localKeySettings.blackKeyMode" class="setting-select mode-select">
-                <option v-for="mode in blackKeyModes" :key="mode.value" :value="mode.value">
-                  {{ mode.label }}
-                </option>
-              </select>
+          <h4 class="section-title">按键配置</h4>
+          <div class="key-mapping-container">
+            <div v-for="group in displayNoteGroups" :key="group.name" class="note-group">
+              <div class="group-header">{{ group.name }}</div>
+              <div class="group-notes">
+                <div v-for="note in group.notes" :key="note.note" class="note-item">
+                  <label>{{ note.name }}:</label>
+                  <input type="text" class="key-input" :value="note.key"
+                    @input="e => updateNoteKey(note.note, (e.target as HTMLInputElement).value)" placeholder="未设置">
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -329,30 +449,22 @@ watch(() => currentTheme?.value, (newVal) => {
 
           <div class="shortcut-item">
             <label>开始/暂停：</label>
-            <div class="shortcut-display">
-              {{ localShortcuts.START_PAUSE }}
-            </div>
+            <input type="text" v-model="localShortcuts.START_PAUSE" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
             <label>停止：</label>
-            <div class="shortcut-display">
-              {{ localShortcuts.STOP }}
-            </div>
+            <input type="text" v-model="localShortcuts.STOP" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
             <label>上一曲：</label>
-            <div class="shortcut-display">
-              {{ localShortcuts.PREV_SONG }}
-            </div>
+            <input type="text" v-model="localShortcuts.PREV_SONG" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
             <label>下一曲：</label>
-            <div class="shortcut-display">
-              {{ localShortcuts.NEXT_SONG }}
-            </div>
+            <input type="text" v-model="localShortcuts.NEXT_SONG" class="shortcut-input">
           </div>
 
           <button @click="restoreDefaultShortcuts" class="restore-button btn btn-small">
@@ -401,6 +513,143 @@ watch(() => currentTheme?.value, (newVal) => {
 </template>
 
 <style scoped>
+/* 基础配置布局 */
+.basic-config-container {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  flex-wrap: wrap; /* 允许换行 */
+}
+
+.range-settings {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 300px; /* 确保在小屏幕下有足够的宽度 */
+}
+
+.range-control-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+}
+
+.range-control-group label {
+  font-size: 0.9rem;
+  color: var(--fg);
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.black-key-settings {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* 与音域设置垂直居中对齐 */
+  min-width: 150px;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+/* 按键映射样式 */
+.key-mapping-container {
+  overflow-x: visible;
+  overflow-y: visible;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: var(--bg);
+  display: flex;
+  flex-direction: row;
+  gap: 1.5rem;
+}
+
+.note-group {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+}
+
+.group-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.group-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.note-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.note-item label {
+  font-size: 0.95rem; /* 放大字体 */
+  color: var(--fg);
+  width: 65px; /* 缩小标签宽度至适配文本的合理值 */
+  white-space: nowrap; /* 防止换行 */
+}
+
+.key-input {
+  flex: none; /* 取消 flex 伸缩 */
+  width: 75px; /* 增加输入框宽度至合理尺寸 */
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--inputbg);
+  color: var(--inputfg);
+  font-size: 0.85rem;
+}
+
+.key-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* 快捷键输入框样式 */
+.shortcut-input {
+  padding: 0.35rem 0.75rem;
+  background-color: var(--inputbg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: var(--inputfg);
+  width: 100px;
+}
+
+.shortcut-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* 保留原有样式 */
 .settings-tabs {
   display: flex;
   border-bottom: 1px solid var(--border);
@@ -435,40 +684,35 @@ watch(() => currentTheme?.value, (newVal) => {
 }
 
 .setting-section {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.7rem;
 }
 
 .section-title {
   font-size: 1rem;
   font-weight: 600;
   color: var(--fg);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.7rem;
 }
 
-/* 按键设置样式 */
+/* 预设配置部分 */
+.preset-config-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.7rem;
+}
+
+.preset-config-section .section-title {
+  margin-bottom: 0;
+}
+
 .preset-buttons {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-.range-controls-row {
-  display: flex;
-  gap: 2rem;
-  align-items: flex-start;
-}
 
-.range-control-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.range-control-group label {
-  font-size: 0.9rem;
-  color: var(--fg);
-  font-weight: 500;
-}
 
 .cascade-select {
   display: flex;
@@ -492,22 +736,6 @@ watch(() => currentTheme?.value, (newVal) => {
   width: 80px;
 }
 
-.mode-select {
-  width: 150px;
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.control-group label {
-  font-size: 0.9rem;
-  color: var(--fg);
-}
-
-/* 快捷键设置样式 */
 .shortcut-item {
   display: flex;
   align-items: center;
@@ -521,21 +749,10 @@ watch(() => currentTheme?.value, (newVal) => {
   color: var(--fg);
 }
 
-.shortcut-display {
-  padding: 0.35rem 0.75rem;
-  background-color: var(--active);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.9rem;
-  color: var(--inputfg);
-}
-
 .restore-button {
   margin-top: 1rem;
 }
 
-/* 主题设置样式 */
 .theme-options {
   display: flex;
   gap: 1.5rem;
@@ -585,7 +802,6 @@ watch(() => currentTheme?.value, (newVal) => {
   color: var(--fg);
 }
 
-/* 按钮样式 */
 .btn {
   padding: 0.5rem 1rem;
   border: 1px solid var(--border);
@@ -607,7 +823,6 @@ watch(() => currentTheme?.value, (newVal) => {
   background-color: var(--active);
 }
 
-/* 对话框底部按钮样式 */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
