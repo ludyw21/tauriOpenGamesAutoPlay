@@ -428,7 +428,7 @@ watch(() => currentTheme?.value, (newVal) => {
                   <span class="slider round"></span>
                 </label>
                 <span class="switch-label">{{ localKeySettings.blackKeyMode === 'support_black_key' ? '支持黑键' : '黑键降音'
-                  }}</span>
+                }}</span>
               </div>
 
               <!-- 长音修剪开关 -->
@@ -445,7 +445,7 @@ watch(() => currentTheme?.value, (newVal) => {
 
         <!-- 按键配置 -->
         <div class="setting-section">
-          <h4 class="section-title">按键配置</h4>
+          <h4 class="section-title">模拟配置</h4>
           <div class="key-mapping-container">
             <div v-for="group in displayNoteGroups" :key="group.name" class="note-group">
               <div class="group-header">{{ group.name }}</div>
@@ -467,22 +467,22 @@ watch(() => currentTheme?.value, (newVal) => {
           <h4 class="section-title">播放控制快捷键</h4>
 
           <div class="shortcut-item">
-            <label>开始/暂停：</label>
+            <label>开始/暂停模拟：</label>
             <input type="text" v-model="localShortcuts.START_PAUSE" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
-            <label>停止：</label>
+            <label>停止模拟：</label>
             <input type="text" v-model="localShortcuts.STOP" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
-            <label>上一曲：</label>
+            <label>上一首：</label>
             <input type="text" v-model="localShortcuts.PREV_SONG" class="shortcut-input">
           </div>
 
           <div class="shortcut-item">
-            <label>下一曲：</label>
+            <label>下一首：</label>
             <input type="text" v-model="localShortcuts.NEXT_SONG" class="shortcut-input">
           </div>
 
@@ -825,7 +825,7 @@ input:checked+.slider:before {
 }
 
 .shortcut-item label {
-  width: 100px;
+  width: 150px;
   font-size: 0.9rem;
   color: var(--fg);
 }

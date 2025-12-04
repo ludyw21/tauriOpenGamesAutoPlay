@@ -155,6 +155,57 @@ const loadMidiFiles = async (folderPath: string) => {
     midiFiles.value = []; // 清空列表
   }
 };
+
+// 选择上一首歌曲
+const selectPrevSong = async () => {
+  if (midiFiles.value.length === 0) {
+    info('[LeftPanel.vue] 没有可用的歌曲');
+    return;
+  }
+
+  const currentIndex = midiFiles.value.indexOf(selectedFile.value);
+  let prevIndex: number;
+
+  if (currentIndex <= 0) {
+    // 如果是第一首或未选中，则选择最后一首
+    prevIndex = midiFiles.value.length - 1;
+  } else {
+    prevIndex = currentIndex - 1;
+  }
+
+  const prevFile = midiFiles.value[prevIndex];
+  info(`[LeftPanel.vue] 选择上一首: ${prevFile}`);
+  await songSelected(prevFile);
+};
+
+// 选择下一首歌曲
+const selectNextSong = async () => {
+  if (midiFiles.value.length === 0) {
+    info('[LeftPanel.vue] 没有可用的歌曲');
+    return;
+  }
+
+  const currentIndex = midiFiles.value.indexOf(selectedFile.value);
+  let nextIndex: number;
+
+  if (currentIndex >= midiFiles.value.length - 1 || currentIndex === -1) {
+    // 如果是最后一首或未选中，则选择第一首
+    nextIndex = 0;
+  } else {
+    nextIndex = currentIndex + 1;
+  }
+
+  const nextFile = midiFiles.value[nextIndex];
+  info(`[LeftPanel.vue] 选择下一首: ${nextFile}`);
+  await songSelected(nextFile);
+};
+
+// 暴露方法给父组件
+defineExpose({
+  selectPrevSong,
+  selectNextSong
+});
+
 </script>
 
 <template>

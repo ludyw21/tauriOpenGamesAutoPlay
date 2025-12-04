@@ -43,6 +43,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::default().build()) // Add this line
         .plugin(tauri_plugin_dialog::init()) // Add this line
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             greet,
             parse_midi,

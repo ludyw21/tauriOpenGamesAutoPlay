@@ -922,6 +922,12 @@ const applySuggestion = (track: Track, type: 'max' | 'min') => {
   }
 };
 
+// 暴露方法给父组件（用于快捷键调用）
+defineExpose({
+  togglePlay,
+  stopPlayback
+});
+
 </script>
 
 <template>

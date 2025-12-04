@@ -2,6 +2,7 @@ import { appDataDir, configDir } from '@tauri-apps/api/path';
 import { exists, readTextFile, writeTextFile, mkdir } from '@tauri-apps/plugin-fs';
 import { info, error, warn } from '@tauri-apps/plugin-log';
 import { platform } from '@tauri-apps/plugin-os';
+import { CONTROL_KEYS } from '../config/keyboard_mapping';
 
 let osPlatform = 'windows';
 // 获取当前操作系统平台
@@ -42,7 +43,7 @@ class SettingsManager {
     themeSettings: {
       currentTheme: 'default'
     },
-    shortcuts: {},
+    shortcuts: { ...CONTROL_KEYS },
     midiFolderPath: undefined,
   };
 

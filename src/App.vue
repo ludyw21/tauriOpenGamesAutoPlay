@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, provide } from "vue";
+import { ref, onMounted, onUnmounted, provide } from "vue";
 import themeConfig from "./config/theme.json";
 import LeftPanel from "./components/LeftPanel.vue";
 import RightPanel from "./components/RightPanel.vue";
 import settingsManager from "./utils/settingsManager";
+import shortcutService from "./services/shortcutService";
 import { error, info } from '@tauri-apps/plugin-log';
 
 // 主题管理
@@ -11,6 +12,10 @@ const currentTheme = ref("default");
 const selectedMidiFile = ref<string | null>(null);
 const themes = themeConfig.theme;
 const colors = ref(themes.find(t => t.name === currentTheme.value) || themes[0]);
+
+// 组件引用
+const leftPanelRef = ref<InstanceType<typeof LeftPanel> | null>(null);
+const rightPanelRef = ref<InstanceType<typeof RightPanel> | null>(null);
 
 // 切换主题
 const changeTheme = async (themeName: string) => {
@@ -56,11 +61,60 @@ onMounted(async () => {
     colors.value = theme;
     updateCSSVariables(theme);
 
+    // 3. 注册全局快捷键
+    const settings = settingsManager.getSettings();
+    const shortcuts = settings.shortcuts || {};
+    info(`[App.vue] 准备注册全局快捷键: ${JSON.stringify(shortcuts)}`);
+
+    await shortcutService.registerShortcuts(shortcuts, {
+      onStartPause: () => {
+        info('[App.vue] 快捷键触发: 开始/暂停');
+        rightPanelRef.value?.togglePlay();
+      },
+      onStop: () => {
+        info('[App.vue] 快捷键触发: 停止');
+        rightPanelRef.value?.stopPlayback();
+      },
+      onPrevSong: async () => {
+        info('[App.vue] 快捷键触发: 上一首');
+        // 先停止当前播放
+        await rightPanelRef.value?.stopPlayback();
+        // 选择上一首
+        await leftPanelRef.value?.selectPrevSong();
+        // 延迟一下再开始播放，确保歌曲已切换
+        setTimeout(() => {
+          rightPanelRef.value?.togglePlay();
+        }, 100);
+      },
+      onNextSong: async () => {
+        info('[App.vue] 快捷键触发: 下一首');
+        // 先停止当前播放
+        await rightPanelRef.value?.stopPlayback();
+        // 选择下一首
+        await leftPanelRef.value?.selectNextSong();
+        // 延迟一下再开始播放，确保歌曲已切换
+        setTimeout(() => {
+          rightPanelRef.value?.togglePlay();
+        }, 100);
+      }
+    });
+
     info('[App.vue:65] 应用初始化完成');
   } catch (err) {
     error(`[App.vue:76] 初始化失败: ${err}`);
     // 使用默认主题
     updateCSSVariables(colors.value);
+  }
+});
+
+// 组件卸载时注销快捷键
+onUnmounted(async () => {
+  try {
+    info('[App.vue] 开始注销全局快捷键...');
+    await shortcutService.unregisterAll();
+    info('[App.vue] 全局快捷键已注销');
+  } catch (err) {
+    error(`[App.vue] 注销快捷键失败: ${err}`);
   }
 });
 
@@ -87,10 +141,10 @@ provide('settingsManager', settingsManager);
     <!-- 主内容区 -->
     <main class="main-content">
       <!-- 左侧面板 -->
-      <LeftPanel @update:selectedSong="selectedMidiFile = $event" />
+      <LeftPanel ref="leftPanelRef" @update:selectedSong="selectedMidiFile = $event" />
 
       <!-- 右侧面板 -->
-      <RightPanel :selectedMidiFile="selectedMidiFile" />
+      <RightPanel ref="rightPanelRef" :selectedMidiFile="selectedMidiFile" />
     </main>
   </div>
 </template>
