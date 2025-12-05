@@ -932,123 +932,126 @@ defineExpose({
 
 <template>
   <section class="right-panel">
-    <!-- 音轨详情区域 -->
-    <div class="tracks-frame">
-      <h3 class="frame-title">
-        音轨详情【 当前播放范围：{{ getNoteName(currentMinNote) }}({{ currentMinNote }}) - {{ getNoteName(currentMaxNote) }}({{
-          currentMaxNote }}) 】
-      </h3>
+    <div class="scrollable-content">
+      <!-- 音轨详情区域 -->
+      <div class="tracks-frame">
+        <h3 class="frame-title">
+          音轨详情【 当前播放范围：{{ getNoteName(currentMinNote) }}({{ currentMinNote }}) - {{ getNoteName(currentMaxNote) }}({{
+            currentMaxNote }}) 】
+        </h3>
 
-      <!-- 当前歌曲名称 -->
-      <div class="current-song-section">
-        <div class="song-info">
-          <span class="label">当前歌曲：</span>
-          <span class="value">{{ displayFileName || "未选择" }}</span>
-        </div>
-      </div>
-
-      <!-- 所有音轨复选框 -->
-      <div class="all-tracks-section">
-        <div class="checkbox-item">
-          <input type="checkbox" id="allTracks" v-model="allTracksSelected" @change="toggleSelectAll" />
-          <label for="allTracks">所有音轨</label>
-        </div>
-      </div>
-
-      <!-- 音轨列表 -->
-      <div class="tracks-list-section">
-        <div class="tracks-list">
-          <div v-if="tracks.length === 0" class="empty-tracks-hint">
-            {{ props.selectedMidiFile ? "正在解析或无有效音轨..." : "请在左侧选择 MIDI 文件" }}
-          </div>
-          <div v-else v-for="track in tracks" :key="track.id" class="track-item">
-            <!-- 音轨选择 -->
-            <div class="track-selection">
-              <input type="checkbox" :id="`track-${track.id}`" v-model="track.selected"
-                @change="toggleTrackSelection(track.id)" />
-            </div>
-
-            <!-- 音轨信息和分析 -->
-            <div class="track-info">
-              <div class="track-header">
-                <h4 class="track-title">音轨{{ track.id + 1 }}：{{ track.name }} ({{ track.noteCount }}个音符)</h4>
-              </div>
-              <div class="track-analysis">
-                <div class="analysis-line">{{ getTrackAnalysisLines(track).line1 }}</div>
-                <div class="analysis-line">{{ getTrackAnalysisLines(track).line2 }}</div>
-                <div v-if="getTrackAnalysisLines(track).suggestions.length > 0" class="analysis-line">
-                  建议:
-                  <template v-for="(sug, idx) in getTrackAnalysisLines(track).suggestions" :key="idx">
-                    <span v-if="idx > 0"> </span>
-                    <span class="suggestion-link" @click="applySuggestion(track, sug.type)">{{ sug.text }}</span>
-                    <span> 移调{{ sug.transpose }}，转位{{ sug.octave }}</span>
-                  </template>
-                </div>
-              </div>
-            </div>
-
-            <!-- 转音设置 -->
-            <div class="transpose-settings">
-              <h5 class="transpose-title">转音设置</h5>
-              <div class="setting-group">
-                <label>移调:</label>
-                <div class="control-buttons">
-                  <button class="btn btn-small" @click="adjustTranspose(track.id, -1)">-</button>
-                  <input type="number" v-model.number="track.transpose" class="number-input" />
-                  <button class="btn btn-small" @click="adjustTranspose(track.id, 1)">+</button>
-                </div>
-              </div>
-              <div class="setting-group">
-                <label>转位:</label>
-                <div class="control-buttons">
-                  <button class="btn btn-small" @click="adjustOctave(track.id, -1)">-</button>
-                  <input type="number" v-model.number="track.octave" class="number-input" />
-                  <button class="btn btn-small" @click="adjustOctave(track.id, 1)">+</button>
-                </div>
-              </div>
-              <div class="reset-link" @click="resetTranspose(track.id)">
-                重置
-              </div>
-            </div>
+        <!-- 当前歌曲名称 -->
+        <div class="current-song-section">
+          <div class="song-info">
+            <span class="label">当前歌曲：</span>
+            <span class="value">{{ displayFileName || "未选择" }}</span>
           </div>
         </div>
+
+        <!-- 所有音轨复选框 -->
+        <div class="all-tracks-section">
+          <div class="checkbox-item">
+            <input type="checkbox" id="allTracks" v-model="allTracksSelected" @change="toggleSelectAll" />
+            <label for="allTracks">所有音轨</label>
+          </div>
+        </div>
+
+        <!-- 音轨列表 -->
+        <div class="tracks-list-section">
+          <div class="tracks-list">
+            <div v-if="tracks.length === 0" class="empty-tracks-hint">
+              {{ props.selectedMidiFile ? "正在解析或无有效音轨..." : "请在左侧选择 MIDI 文件" }}
+            </div>
+            <div v-else v-for="track in tracks" :key="track.id" class="track-item">
+              <!-- 音轨选择 -->
+              <div class="track-selection">
+                <input type="checkbox" :id="`track-${track.id}`" v-model="track.selected"
+                  @change="toggleTrackSelection(track.id)" />
+              </div>
+
+              <!-- 音轨信息和分析 -->
+              <div class="track-info">
+                <div class="track-header">
+                  <h4 class="track-title">音轨{{ track.id + 1 }}：{{ track.name }} ({{ track.noteCount }}个音符)</h4>
+                </div>
+                <div class="track-analysis">
+                  <div class="analysis-line">{{ getTrackAnalysisLines(track).line1 }}</div>
+                  <div class="analysis-line">{{ getTrackAnalysisLines(track).line2 }}</div>
+                  <div v-if="getTrackAnalysisLines(track).suggestions.length > 0" class="analysis-line">
+                    建议:
+                    <template v-for="(sug, idx) in getTrackAnalysisLines(track).suggestions" :key="idx">
+                      <span v-if="idx > 0"> </span>
+                      <span class="suggestion-link" @click="applySuggestion(track, sug.type)">{{ sug.text }}</span>
+                      <span> 移调{{ sug.transpose }}，转位{{ sug.octave }}</span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 转音设置 -->
+              <div class="transpose-settings">
+                <h5 class="transpose-title">转音设置</h5>
+                <div class="setting-group">
+                  <label>移调:</label>
+                  <div class="control-buttons">
+                    <button class="btn btn-small" @click="adjustTranspose(track.id, -1)">-</button>
+                    <input type="number" v-model.number="track.transpose" class="number-input" />
+                    <button class="btn btn-small" @click="adjustTranspose(track.id, 1)">+</button>
+                  </div>
+                </div>
+                <div class="setting-group">
+                  <label>转位:</label>
+                  <div class="control-buttons">
+                    <button class="btn btn-small" @click="adjustOctave(track.id, -1)">-</button>
+                    <input type="number" v-model.number="track.octave" class="number-input" />
+                    <button class="btn btn-small" @click="adjustOctave(track.id, 1)">+</button>
+                  </div>
+                </div>
+                <div class="reset-link" @click="resetTranspose(track.id)">
+                  重置
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- 操作区域 -->
-    <div class="controls-frame">
-      <h3 class="frame-title">操作</h3>
+      <!-- 操作区域 -->
+      <div class="controls-frame">
+        <h3 class="frame-title">操作</h3>
 
-      <!-- 剩余时间 -->
-      <div class="time-section">
-        <div class="time-label">剩余时间: {{ isPlayingMidi ? formatTime(midiRemainingTime) : remainingTime }}</div>
+        <!-- 剩余时间 -->
+        <div class="time-section">
+          <div class="time-label">剩余时间: {{ isPlayingMidi ? formatTime(midiRemainingTime) : remainingTime }}</div>
+        </div>
+
+        <!-- 控制按钮 -->
+        <div class="control-buttons-section">
+          <button class="btn btn-success" @click="togglePlay" :disabled="!isPlayButtonEnabled">{{ countdownSeconds > 0 ?
+            `${countdownSeconds}秒后开始` : (isPlaying ? '暂停模拟' : '开始模拟') }}</button>
+          <button class="btn btn-danger" @click="stopPlayback" :disabled="!isStopButtonEnabled">停止模拟</button>
+          <button class="btn btn-info" @click="togglePreview" :disabled="!isPreviewButtonEnabled">{{ isPreviewing ?
+            '停止试听'
+            :
+            '效果试听' }}</button>
+          <button class="btn btn-info" @click="toggleMidiPlayback" :disabled="!isMidiPlaybackButtonEnabled">{{
+            isPlayingMidi ?
+              '停止试听' : '文件试听' }}</button>
+          <!-- <button class="btn btn-secondary" @click="testSound">测试声音</button> -->
+        </div>
       </div>
 
-      <!-- 控制按钮 -->
-      <div class="control-buttons-section">
-        <button class="btn btn-success" @click="togglePlay" :disabled="!isPlayButtonEnabled">{{ countdownSeconds > 0 ?
-          `${countdownSeconds}秒后开始` : (isPlaying ? '暂停模拟' : '开始模拟') }}</button>
-        <button class="btn btn-danger" @click="stopPlayback" :disabled="!isStopButtonEnabled">停止模拟</button>
-        <button class="btn btn-info" @click="togglePreview" :disabled="!isPreviewButtonEnabled">{{ isPreviewing ? '停止试听'
-          :
-          '效果试听' }}</button>
-        <button class="btn btn-info" @click="toggleMidiPlayback" :disabled="!isMidiPlaybackButtonEnabled">{{
-          isPlayingMidi ?
-            '停止试听' : '文件试听' }}</button>
-        <!-- <button class="btn btn-secondary" @click="testSound">测试声音</button> -->
-      </div>
-    </div>
+      <!-- 其他功能 -->
+      <div class="other-frame">
+        <h3 class="frame-title">其他</h3>
 
-    <!-- 其他功能 -->
-    <div class="other-frame">
-      <h3 class="frame-title">其他</h3>
-
-      <!-- 其他按钮 -->
-      <div class="other-buttons-section">
-        <button class="btn btn-secondary" @click="showEventTable">事件表</button>
-        <button class="btn btn-secondary" @click="showSettings">设置</button>
-        <button class="btn btn-secondary" @click="showHelp">帮助</button>
-      </div>
+        <!-- 其他按钮 -->
+        <div class="other-buttons-section">
+          <button class="btn btn-secondary" @click="showEventTable">事件表</button>
+          <button class="btn btn-secondary" @click="showSettings">设置</button>
+          <button class="btn btn-secondary" @click="showHelp">帮助</button>
+        </div>
+      </div> <!-- Closing other-frame -->
     </div>
   </section>
 
@@ -1066,18 +1069,37 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0.5rem;
+  padding: 0rem 0.5rem;
 }
 
 /* 通用框架样式 */
-.tracks-frame,
-.controls-frame,
-.other-frame {
+.tracks-frame {
   background-color: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.5rem;
   margin-bottom: 0.4rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 300px;
+}
+
+.controls-frame {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.other-frame {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin-bottom: 0.2rem;
 }
 
 .frame-title {
@@ -1131,7 +1153,9 @@ defineExpose({
 
 /* 音轨列表 */
 .tracks-list-section {
-  height: 300px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   background-color: var(--bg);
   border: 1px solid var(--border);
@@ -1140,7 +1164,9 @@ defineExpose({
 }
 
 .tracks-list {
-  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .empty-tracks-hint {
@@ -1161,6 +1187,7 @@ defineExpose({
   border: 1px solid var(--border);
   border-radius: 4px;
   margin-bottom: 0.3rem;
+  overflow: hidden;
 }
 
 .track-item:last-child {
@@ -1175,6 +1202,8 @@ defineExpose({
 
 .track-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .track-header {
@@ -1190,11 +1219,16 @@ defineExpose({
 
 .track-analysis {
   font-size: 0.8rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   color: var(--fg);
   background-color: var(--bg);
   padding: 0.25rem;
   border-radius: 4px;
-  max-height: 90px;
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .analysis-line {
@@ -1369,5 +1403,12 @@ defineExpose({
 .btn:hover {
   background-color: var(--dark);
   border-color: var(--dark);
+}
+
+.scrollable-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 </style>

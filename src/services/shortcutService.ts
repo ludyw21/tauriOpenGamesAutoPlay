@@ -11,7 +11,7 @@ export interface ShortcutHandlers {
 class ShortcutService {
   private registeredShortcuts: string[] = [];
   private lastTriggerTime: Map<string, number> = new Map();
-  private readonly DEBOUNCE_DELAY = 300; // 防抖延迟（毫秒）
+  private readonly DEBOUNCE_DELAY = 600; // 防抖延迟（毫秒）
 
   /**
    * 注册全局快捷键
