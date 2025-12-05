@@ -23,8 +23,8 @@ const currentMaxNote = ref(83);
 // 初始化时从 settingsManager 获取配置
 onMounted(() => {
   const settings = settingsManager.getSettings();
-  currentMinNote.value = settings.keySettings?.minNote || 48;
-  currentMaxNote.value = settings.keySettings?.maxNote || 83;
+  currentMinNote.value = settings.analyzerSetting?.minNote || 48;
+  currentMaxNote.value = settings.analyzerSetting?.maxNote || 83;
 });
 
 // 组件卸载时清理
@@ -89,8 +89,8 @@ watch(() => props.selectedMidiFile, async (newFile) => {
 
       // 从设置中获取min/max note
       const settings = settingsManager.getSettings();
-      const minNote = settings.keySettings?.minNote || 48;
-      const maxNote = settings.keySettings?.maxNote || 83;
+      const minNote = settings.analyzerSetting?.minNote || 48;
+      const maxNote = settings.analyzerSetting?.maxNote || 83;
 
       // 更新当前显示的范围（确保界面显示正确的范围）
       currentMinNote.value = minNote;
@@ -101,8 +101,8 @@ watch(() => props.selectedMidiFile, async (newFile) => {
         filePath: newFile,
         minNote: minNote,
         maxNote: maxNote,
-        blackKeyMode: settings.keySettings?.blackKeyMode || "support_black_key",
-        trimLongNotes: settings.keySettings?.trimLongNotes || false
+        blackKeyMode: settings.analyzerSetting?.blackKeyMode || "support_black_key",
+        trimLongNotes: settings.analyzerSetting?.trimLongNotes || false
       });
       info("[RightPanel.vue:33] 解析成功");
 
@@ -266,8 +266,8 @@ const reanalyzeTrack = (track: Track) => {
 
   // 从设置中获取限制值
   const settings = settingsManager.getSettings();
-  const limit_min = settings.keySettings?.minNote || 48;
-  const limit_max = settings.keySettings?.maxNote || 83;
+  const limit_min = settings.analyzerSetting?.minNote || 48;
+  const limit_max = settings.analyzerSetting?.maxNote || 83;
 
   // 重新计算分析
   const max_note = Math.max(...adjustedNotes);
@@ -416,6 +416,12 @@ const startPlayback = async () => {
   try {
     info('[RightPanel.vue] 开始准备播放...');
 
+    // 获取模拟设置
+    const settings = settingsManager.getSettings();
+    const simulationType = settings.simulationSettings?.simulationType || 'keyboard';
+
+    info(`[RightPanel.vue] 模拟类型: ${simulationType}`);
+
     // 1. 使用 filteredMidiEvents（已经过音轨选择、转音、黑键处理）
     // 2. 过滤超限事件和非 note_on 事件
     const validEvents = filteredMidiEvents.value.filter(event => {
@@ -432,26 +438,55 @@ const startPlayback = async () => {
 
     info(`[RightPanel.vue] 过滤后有${validEvents.length}个有效音符，原始${filteredMidiEvents.value.filter(e => e.type === 'note_on').length}个音符`);
 
-    // 3. 将 MIDI 音符事件映射到按键事件
-    const keyEvents = validEvents.map(event => {
-      const key = NOTE_TO_KEY[event.note];
-      if (!key) {
-        info(`[RightPanel.vue] 警告：音符${event.note}没有对应的按键映射`);
-        return null;
+    // 3. 根据模拟类型创建事件
+    let events: any[] = [];
+
+    if (simulationType === 'keyboard') {
+      // 键盘模拟：将 MIDI 音符事件映射到按键事件
+      const noteToKey = settings.simulationSettings?.noteToKey || {};
+      events = validEvents.map(event => {
+        const key = noteToKey[event.note];
+        if (!key) {
+          info(`[RightPanel.vue] 警告：音符${event.note}没有对应的按键映射`);
+          return null;
+        }
+        return {
+          time: event.time,
+          key: key,
+          duration: event.duration || 0.1
+        };
+      }).filter(e => e !== null);
+
+      if (events.length === 0) {
+        error('[RightPanel.vue] 没有可映射的按键事件');
+        return;
       }
-      return {
-        time: event.time,
-        key: key,
-        duration: event.duration || 0.1
-      };
-    }).filter(e => e !== null); // 过滤掉没有映射的音符
 
-    if (keyEvents.length === 0) {
-      error('[RightPanel.vue] 没有可映射的按键事件');
-      return;
+      info(`[RightPanel.vue] 准备播放${events.length}个按键事件`);
+    } else if (simulationType === 'mouse') {
+      // 鼠标模拟：将 MIDI 音符事件映射到鼠标事件
+      const noteToMouse = settings.simulationSettings?.noteToMouse || {};
+      events = validEvents.map(event => {
+        const coord = noteToMouse[event.note];
+        if (!coord) {
+          info(`[RightPanel.vue] 警告：音符${event.note}没有对应的鼠标坐标`);
+          return null;
+        }
+        return {
+          time: event.time,
+          x: coord.x,
+          y: coord.y,
+          duration: event.duration || 0.1
+        };
+      }).filter(e => e !== null);
+
+      if (events.length === 0) {
+        error('[RightPanel.vue] 没有可映射的鼠标事件');
+        return;
+      }
+
+      info(`[RightPanel.vue] 准备播放${events.length}个鼠标事件`);
     }
-
-    info(`[RightPanel.vue] 准备播放${keyEvents.length}个按键事件`);
 
     // 4. 计算总时长
     const maxEndTime = Math.max(...validEvents.map(e => e.end || e.time));
@@ -494,11 +529,16 @@ const startPlayback = async () => {
     }
     cancelCountdownFunc = null; // 清除引用
 
-    // 6. 调用后端 start_playback 命令
+    // 6. 调用后端命令
     // 在调用后端前，强制设置正确的按钮状态，防止之前的状态混乱
     setPlayingState();
 
-    await invoke('start_playback', { events: keyEvents });
+    if (simulationType === 'keyboard') {
+      await invoke('start_playback', { events });
+    } else if (simulationType === 'mouse') {
+      await invoke('start_mouse_playback', { events });
+    }
+
     isPlaying.value = true;
     info('[RightPanel.vue] 播放已启动');
 
@@ -546,7 +586,15 @@ const stopPlayback = async () => {
   // 调用后端停止播放
   if (isPlaying.value) {
     try {
-      await invoke('stop_playback');
+      // 获取模拟类型
+      const settings = settingsManager.getSettings();
+      const simulationType = settings.simulationSettings?.simulationType || 'keyboard';
+
+      if (simulationType === 'keyboard') {
+        await invoke('stop_playback');
+      } else if (simulationType === 'mouse') {
+        await invoke('stop_mouse_playback');
+      }
     } catch (e) {
       error(`[RightPanel.vue] 停止播放时出错: ${e}`);
     }
@@ -810,25 +858,25 @@ const showHelp = () => {
 const handleSettingsSaved = async (payload: any) => {
   info(`[RightPanel.vue:2929] 设置已保存`);
 
-  // 检查 keySettings 是否变更
-  if (payload.keySettingsChanged) {
-    info('[RightPanel.vue] keySettings 已变更，更新当前显示范围');
+  // 检查 analyzerSetting 是否变更
+  if (payload.analyzerSettingChanged) {
+    info('[RightPanel.vue] analyzerSetting 已变更，更新当前显示范围');
 
     // 更新当前显示的 min/max note
     const newSettings = settingsManager.getSettings();
-    currentMinNote.value = newSettings.keySettings?.minNote || 48;
-    currentMaxNote.value = newSettings.keySettings?.maxNote || 83;
+    currentMinNote.value = newSettings.analyzerSetting?.minNote || 48;
+    currentMaxNote.value = newSettings.analyzerSetting?.maxNote || 83;
 
     // 如果有选中的 MIDI 文件，重新解析
     if (props.selectedMidiFile) {
-      info(`[RightPanel.vue] 检测到 keySettings 变更且有选中文件，重新解析: ${props.selectedMidiFile}`);
+      info(`[RightPanel.vue] 检测到 analyzerSetting 变更且有选中文件，重新解析: ${props.selectedMidiFile}`);
       try {
         const result: any = await invoke("parse_midi", {
           filePath: props.selectedMidiFile,
           minNote: currentMinNote.value,
           maxNote: currentMaxNote.value,
-          blackKeyMode: newSettings.keySettings?.blackKeyMode || "support_black_key",
-          trimLongNotes: newSettings.keySettings?.trimLongNotes || false
+          blackKeyMode: newSettings.analyzerSetting?.blackKeyMode || "support_black_key",
+          trimLongNotes: newSettings.analyzerSetting?.trimLongNotes || false
         });
 
         // 更新事件数据

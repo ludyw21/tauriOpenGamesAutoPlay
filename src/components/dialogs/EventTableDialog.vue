@@ -29,8 +29,8 @@ const settingsManager = inject('settingsManager') as any;
 
 // 获取设置
 const settings = settingsManager.getSettings();
-const currentMinNote = ref(settings.keySettings?.minNote || 48);
-const currentMaxNote = ref(settings.keySettings?.maxNote || 83);
+const currentMinNote = ref(settings.analyzerSetting?.minNote || 48);
+const currentMaxNote = ref(settings.analyzerSetting?.maxNote || 83);
 
 // 状态
 const showOnlyOutOfRange = ref(false);

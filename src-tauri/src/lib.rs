@@ -1,5 +1,6 @@
 mod keypress_simulator;
 mod midi_analyzer;
+mod mouse_simulator;
 
 #[tauri::command]
 fn parse_midi(
@@ -28,6 +29,21 @@ fn stop_playback() -> Result<(), String> {
     keypress_simulator::stop_playback()
 }
 
+#[tauri::command]
+fn start_mouse_playback(events: Vec<mouse_simulator::MouseEvent>) -> Result<(), String> {
+    mouse_simulator::start_mouse_playback(events)
+}
+
+#[tauri::command]
+fn stop_mouse_playback() -> Result<(), String> {
+    mouse_simulator::stop_mouse_playback()
+}
+
+#[tauri::command]
+async fn pick_mouse_coordinate() -> Result<(i32, i32), String> {
+    mouse_simulator::pick_coordinate().await
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -48,7 +64,10 @@ pub fn run() {
             greet,
             parse_midi,
             start_playback,
-            stop_playback
+            stop_playback,
+            start_mouse_playback,
+            stop_mouse_playback,
+            pick_mouse_coordinate
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

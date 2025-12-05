@@ -20,15 +20,19 @@ interface AppSettings {
   themeSettings: {
     currentTheme: string;
   };
-  keySettings?: {
+  analyzerSetting?: {
     minNote: number;
     maxNote: number;
     blackKeyMode: string;
     trimLongNotes: boolean;
+  };
+  simulationSettings?: {
+    simulationType: 'keyboard' | 'mouse';
     noteToKey: Record<number, string>;
+    noteToMouse?: Record<number, { x: number; y: number }>;
   };
   shortcuts?: Record<string, string>;
-  midiFolderPath?: string; // Add this line
+  midiFolderPath?: string;
 }
 
 class SettingsManager {
@@ -42,6 +46,16 @@ class SettingsManager {
   private defaultSettings: AppSettings = {
     themeSettings: {
       currentTheme: 'default'
+    },
+    analyzerSetting: {
+      minNote: 48,
+      maxNote: 83,
+      blackKeyMode: 'support_black_key',
+      trimLongNotes: false
+    },
+    simulationSettings: {
+      simulationType: 'keyboard',
+      noteToKey: {}
     },
     shortcuts: { ...CONTROL_KEYS },
     midiFolderPath: undefined,
@@ -167,9 +181,16 @@ class SettingsManager {
           // 合并到全局配置变量
           this.settings = {
             themeSettings: { ...this.defaultSettings.themeSettings, ...(parsedSettings.themeSettings || {}) },
+            analyzerSetting: parsedSettings.analyzerSetting ? {
+              ...this.defaultSettings.analyzerSetting,
+              ...parsedSettings.analyzerSetting
+            } : this.defaultSettings.analyzerSetting,
+            simulationSettings: parsedSettings.simulationSettings ? {
+              ...this.defaultSettings.simulationSettings,
+              ...parsedSettings.simulationSettings
+            } : this.defaultSettings.simulationSettings,
             shortcuts: { ...(this.defaultSettings.shortcuts || {}), ...(parsedSettings.shortcuts || {}) },
-            midiFolderPath: parsedSettings.midiFolderPath,
-            keySettings: parsedSettings.keySettings
+            midiFolderPath: parsedSettings.midiFolderPath
           };
 
           info(`[settingsManager.ts] 配置加载成功: ${JSON.stringify(this.settings)}`);
@@ -198,14 +219,18 @@ class SettingsManager {
           ...this.settings.themeSettings,
           ...(settings.themeSettings || {})
         },
+        analyzerSetting: settings.analyzerSetting ? {
+          ...this.settings.analyzerSetting,
+          ...settings.analyzerSetting
+        } : this.settings.analyzerSetting,
+        simulationSettings: settings.simulationSettings ? {
+          ...this.settings.simulationSettings,
+          ...settings.simulationSettings
+        } : this.settings.simulationSettings,
         shortcuts: {
           ...this.settings.shortcuts,
           ...(settings.shortcuts || {})
         },
-        keySettings: settings.keySettings ? {
-          ...this.settings.keySettings,
-          ...settings.keySettings
-        } : this.settings.keySettings,
         midiFolderPath: settings.midiFolderPath !== undefined ? settings.midiFolderPath : this.settings.midiFolderPath,
       };
       info(`[settingsManager.ts] 内存配置已更新: ${JSON.stringify(this.settings)}`);
