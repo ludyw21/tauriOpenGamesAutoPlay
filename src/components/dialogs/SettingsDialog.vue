@@ -506,7 +506,7 @@ const pickCoordinate = async (note: number) => {
                 </label>
                 <span class="switch-label">{{ localAnalyzerSettings.blackKeyMode === 'support_black_key' ? '支持黑键' :
                   '黑键降音'
-                  }}</span>
+                }}</span>
               </div>
 
               <!-- 长音修剪开关 -->
@@ -556,7 +556,7 @@ const pickCoordinate = async (note: number) => {
             <div v-for="group in displayNoteGroups" :key="group.name" class="note-group">
               <div class="group-header">{{ group.name }}</div>
               <div class="group-notes">
-                <div v-for="note in group.notes" :key="note.note" class="note-item mouse-item"
+                <div v-for="note in group.notes" :key="note.note" class="note-item"
                   :class="{ 'picking': pickingNote === note.note }">
                   <label>{{ note.name }}:</label>
                   <input type="text" class="key-input" :value="formatMouseCoordinate(note.note)" disabled
@@ -760,7 +760,7 @@ input:checked+.slider:before {
 
 /* 按键映射样式 */
 .key-mapping-container {
-  overflow-x: visible;
+  overflow-x: auto;
   overflow-y: visible;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -775,6 +775,7 @@ input:checked+.slider:before {
   min-width: 150px;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .group-header {
@@ -791,37 +792,35 @@ input:checked+.slider:before {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  overflow-y: auto;
   padding-right: 0.5rem;
 }
 
-.note-item {
+.note-item,
+.mouse-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
 }
 
 .note-item label {
   font-size: 0.95rem;
-  /* 放大字体 */
   color: var(--fg);
   width: 65px;
-  /* 缩小标签宽度至适配文本的合理值 */
   white-space: nowrap;
-  /* 防止换行 */
+  flex-shrink: 0;
 }
 
 .key-input {
   flex: none;
-  /* 取消 flex 伸缩 */
   width: 75px;
-  /* 增加输入框宽度至合理尺寸 */
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   background-color: var(--inputbg);
   color: var(--inputfg);
   font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .key-input:focus {
@@ -1088,22 +1087,20 @@ input:checked+.slider:before {
 }
 
 /* 鼠标模拟相关样式 */
-.mouse-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.3s ease;
-}
-
 .mouse-item label {
+  font-size: 0.95rem;
+  color: var(--fg);
   min-width: 80px;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
 .mouse-item .key-input {
-  flex: 1;
+  flex: none;
+  width: 75px;
 }
 
+.note-item.picking,
 .mouse-item.picking {
   background-color: rgba(var(--primary-rgb, 0, 123, 255), 0.1);
   padding: 0.25rem;
@@ -1118,11 +1115,12 @@ input:checked+.slider:before {
   background-color: var(--inputbg);
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 28px;
+  width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .coordinate-icon {
