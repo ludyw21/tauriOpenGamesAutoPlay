@@ -3,6 +3,7 @@ import { ref, reactive, computed, inject, watch, onMounted } from "vue";
 import { info, error } from '@tauri-apps/plugin-log';
 import { GROUPS, NOTE_NAMES, getNoteName } from "../config/groups";
 import { NOTE_TO_KEY } from "../config/keyboard_mapping";
+import Toast from "./common/Toast.vue";
 
 // 从 App.vue 注入 settingsManager
 const settingsManager = inject('settingsManager') as any;
@@ -20,6 +21,11 @@ const localSimulationSettings = reactive({
   noteToKey: {} as Record<number, string>,
   noteToMouse: {} as Record<number, { x: number; y: number }>
 });
+
+// Toast 通知状态
+const toastVisible = ref(false);
+const toastMessage = ref('');
+const toastType = ref<'success' | 'info' | 'warning' | 'error'>('success');
 
 // 预设配置选项
 const presetConfigs = [
@@ -101,7 +107,7 @@ const initLocalState = () => {
   localAnalyzerSettings.minNote = settings.analyzerSetting?.minNote || 48;
   localAnalyzerSettings.maxNote = settings.analyzerSetting?.maxNote || 83;
   localAnalyzerSettings.blackKeyMode = settings.analyzerSetting?.blackKeyMode || "support_black_key";
-  localAnalyzerSettings.trimLongNotes = settings.analyzerSetting?.trimLongNotes || false;
+  localAnalyzerSettings.trimLongNotes = settings.analyzerSetting?.trimLongNotes ?? false;
 
   localSimulationSettings.simulationType = settings.simulationSettings?.simulationType || "keyboard";
   localSimulationSettings.noteToKey = { ...(settings.simulationSettings?.noteToKey || {}) };
@@ -286,9 +292,14 @@ const saveSettings = async () => {
 
   localSimulationSettings.noteToKey = fullNoteToKey;
 
+  // 保留原有的 noteToMouse 配置(不清空鼠标坐标设置)
+  const currentSettings = settingsManager.getSettings();
   const settings = {
     analyzerSetting: { ...localAnalyzerSettings },
-    simulationSettings: { ...localSimulationSettings }
+    simulationSettings: {
+      ...localSimulationSettings,
+      noteToMouse: currentSettings.simulationSettings?.noteToMouse || {}
+    }
   };
 
   await settingsManager.saveSettings(settings);
@@ -300,12 +311,24 @@ const saveSettings = async () => {
     oldAnalyzerSetting.trimLongNotes !== localAnalyzerSettings.trimLongNotes;
 
   info("[KeySettings.vue] 按键设置已保存");
-  alert("按键设置已保存!" + (analyzerSettingChanged ? "\n音域设置已变更,请重新选择MIDI文件以应用新设置。" : ""));
+  
+  // 显示 Toast 通知
+  toastMessage.value = "按键设置已保存!" + (analyzerSettingChanged ? "\n音域设置已变更,请重新选择MIDI文件以应用新设置。" : "");
+  toastType.value = analyzerSettingChanged ? 'warning' : 'success';
+  toastVisible.value = true;
 };
 </script>
 
 <template>
   <div class="key-settings-view">
+    <!-- Toast 通知 -->
+    <Toast 
+      :visible="toastVisible" 
+      @update:visible="toastVisible = $event"
+      :message="toastMessage"
+      :type="toastType"
+    />
+    
     <!-- 保存按钮 -->
     <div class="top-actions">
       <button @click="saveSettings" class="btn btn-primary">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive, inject, onMounted } from "vue";
+import { ref, reactive, inject, onMounted } from "vue";
 import { info } from '@tauri-apps/plugin-log';
+import Toast from "./common/Toast.vue";
 
 // 从 App.vue 注入 settingsManager
 const settingsManager = inject('settingsManager') as any;
@@ -12,6 +13,11 @@ const localShortcuts = reactive({
   PREV_SONG: "alt+up",
   NEXT_SONG: "alt+down"
 });
+
+// Toast 通知状态
+const toastVisible = ref(false);
+const toastMessage = ref('');
+const toastType = ref<'success' | 'info' | 'warning' | 'error'>('success');
 
 // 初始化本地状态
 const initLocalState = () => {
@@ -45,12 +51,19 @@ const saveSettings = async () => {
 
   await settingsManager.saveSettings(settings);
   info("[ShortcutSettings.vue] 快捷键设置已保存");
-  alert("快捷键设置已保存!");
+
+  // 显示 Toast 通知
+  toastMessage.value = "快捷键设置已保存!";
+  toastType.value = 'success';
+  toastVisible.value = true;
 };
 </script>
 
 <template>
   <div class="shortcut-settings-view">
+    <!-- Toast 通知 -->
+    <Toast :visible="toastVisible" @update:visible="toastVisible = $event" :message="toastMessage" :type="toastType" />
+
 
     <div class="settings-content">
       <div class="setting-section">

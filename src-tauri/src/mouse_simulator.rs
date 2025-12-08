@@ -242,7 +242,7 @@ pub fn stop_mouse_playback() -> Result<(), String> {
 /// 选择鼠标坐标
 /// 监听全局鼠标点击事件,返回点击位置的坐标
 pub async fn pick_coordinate() -> Result<(i32, i32), String> {
-    use rdev::{listen, Button, Event, EventType};
+    use rdev::{grab, Button, Event, EventType};
     use std::sync::mpsc::channel;
     use std::sync::{
         atomic::{AtomicBool, Ordering},
@@ -263,11 +263,11 @@ pub async fn pick_coordinate() -> Result<(i32, i32), String> {
 
     // 启动监听线程
     let _listen_thread = thread::spawn(move || {
-        // 监听回调函数
-        let callback = move |event: Event| {
+        // 监听回调函数,返回 Option<Event> 来控制事件传播
+        let callback = move |event: Event| -> Option<Event> {
             // 检查是否需要停止
             if stop_flag_clone.load(Ordering::Relaxed) {
-                return;
+                return Some(event); // 停止后不再拦截事件
             }
 
             match event.event_type {
@@ -276,21 +276,29 @@ pub async fn pick_coordinate() -> Result<(i32, i32), String> {
                     if let Ok(mut pos) = last_position_clone.lock() {
                         *pos = (x as i32, y as i32);
                     }
+                    Some(event) // 允许鼠标移动事件传播
                 }
                 EventType::ButtonPress(Button::Left) => {
-                    // 捕获鼠标左键点击,发送最后记录的位置
+                    // 捕获鼠标左键点击
                     if let Ok(pos) = last_position_clone.lock() {
-                        let _ = tx.send(*pos);
+                        // 如果 last_position 还是初始值 (0, 0),说明点击太快
+                        // 这种情况下我们无法获取准确坐标,但至少不返回 (0, 0)
+                        if *pos != (0, 0) {
+                            let _ = tx.send(*pos);
+                            // 设置停止标志
+                            stop_flag_clone.store(true, Ordering::Relaxed);
+                            // 拦截这个点击事件,不让它传播
+                            return None;
+                        }
                     }
-                    // 设置停止标志
-                    stop_flag_clone.store(true, Ordering::Relaxed);
+                    Some(event) // 如果获取失败,允许事件传播
                 }
-                _ => {}
+                _ => Some(event), // 其他事件正常传播
             }
         };
 
-        // 开始监听
-        if let Err(e) = listen(callback) {
+        // 使用 grab 来拦截事件
+        if let Err(e) = grab(callback) {
             eprintln!("监听鼠标事件失败: {:?}", e);
         }
     });

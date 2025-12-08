@@ -19,6 +19,7 @@ lazy_static::lazy_static! {
 
 /// 将字符映射到 macOS 虚拟键码
 /// 使用 kVK_ANSI_* 键码，这些是位置相关的，不需要访问输入源
+#[cfg(target_os = "macos")]
 fn char_to_macos_keycode(ch: char) -> Option<u16> {
     match ch.to_ascii_lowercase() {
         'a' => Some(0x00), // kVK_ANSI_A
@@ -57,6 +58,64 @@ fn char_to_macos_keycode(ch: char) -> Option<u16> {
         '7' => Some(0x1A), // kVK_ANSI_7
         '8' => Some(0x1C), // kVK_ANSI_8
         '9' => Some(0x19), // kVK_ANSI_9
+        _ => None,
+    }
+}
+
+/// 将字符映射到 Windows 扫描码
+/// 使用硬件扫描码,游戏的 DirectInput 可以识别
+#[cfg(target_os = "windows")]
+fn char_to_windows_scancode(ch: char) -> Option<u16> {
+    match ch.to_ascii_lowercase() {
+        'a' => Some(0x1E), // Scan code for A
+        'b' => Some(0x30), // Scan code for B
+        'c' => Some(0x2E), // Scan code for C
+        'd' => Some(0x20), // Scan code for D
+        'e' => Some(0x12), // Scan code for E
+        'f' => Some(0x21), // Scan code for F
+        'g' => Some(0x22), // Scan code for G
+        'h' => Some(0x23), // Scan code for H
+        'i' => Some(0x17), // Scan code for I
+        'j' => Some(0x24), // Scan code for J
+        'k' => Some(0x25), // Scan code for K
+        'l' => Some(0x26), // Scan code for L
+        'm' => Some(0x32), // Scan code for M
+        'n' => Some(0x31), // Scan code for N
+        'o' => Some(0x18), // Scan code for O
+        'p' => Some(0x19), // Scan code for P
+        'q' => Some(0x10), // Scan code for Q
+        'r' => Some(0x13), // Scan code for R
+        's' => Some(0x1F), // Scan code for S
+        't' => Some(0x14), // Scan code for T
+        'u' => Some(0x16), // Scan code for U
+        'v' => Some(0x2F), // Scan code for V
+        'w' => Some(0x11), // Scan code for W
+        'x' => Some(0x2D), // Scan code for X
+        'y' => Some(0x15), // Scan code for Y
+        'z' => Some(0x2C), // Scan code for Z
+        '0' => Some(0x0B), // Scan code for 0
+        '1' => Some(0x02), // Scan code for 1
+        '2' => Some(0x03), // Scan code for 2
+        '3' => Some(0x04), // Scan code for 3
+        '4' => Some(0x05), // Scan code for 4
+        '5' => Some(0x06), // Scan code for 5
+        '6' => Some(0x07), // Scan code for 6
+        '7' => Some(0x08), // Scan code for 7
+        '8' => Some(0x09), // Scan code for 8
+        '9' => Some(0x0A), // Scan code for 9
+        _ => None,
+    }
+}
+
+/// 将修饰键映射到 Windows 扫描码
+/// 用于游戏的 DirectInput 识别
+#[cfg(target_os = "windows")]
+fn modifier_to_windows_scancode(modifier: Key) -> Option<u16> {
+    match modifier {
+        Key::Shift => Some(0x2A),   // Left Shift scan code
+        Key::Control => Some(0x1D), // Left Ctrl scan code
+        Key::Alt => Some(0x38),     // Left Alt scan code
+        Key::Meta => Some(0x5B),    // Left Windows key scan code (extended)
         _ => None,
     }
 }
@@ -106,14 +165,41 @@ fn parse_key_string(key_str: &str) -> Result<(Vec<Key>, Option<char>), String> {
 }
 
 /// 模拟按键按下
-fn simulate_keypress(enigo: &mut Enigo, key_str: &str, duration: f64) -> Result<(), String> {
+fn simulate_keypress(enigo: &mut Enigo, key_str: &str, _duration: f64) -> Result<(), String> {
     let (modifiers, main_key) = parse_key_string(key_str)?;
 
-    // 按下修饰键
+    // 按下修饰键,每个修饰键之间添加小延迟
     for modifier in &modifiers {
-        enigo
-            .key(*modifier, Direction::Press)
-            .map_err(|e| format!("Failed to press modifier: {:?}", e))?;
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: 使用扫描码以支持游戏的 DirectInput
+            if let Some(scancode) = modifier_to_windows_scancode(*modifier) {
+                enigo
+                    .raw(scancode, Direction::Press)
+                    .map_err(|e| format!("Failed to press modifier: {:?}", e))?;
+            } else {
+                // 如果没有扫描码映射,回退到普通方法
+                enigo
+                    .key(*modifier, Direction::Press)
+                    .map_err(|e| format!("Failed to press modifier: {:?}", e))?;
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // 其他平台:使用标准方法
+            enigo
+                .key(*modifier, Direction::Press)
+                .map_err(|e| format!("Failed to press modifier: {:?}", e))?;
+        }
+
+        // 修饰键之间延迟 5ms(减少延迟以提高播放速度)
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    // 修饰键按下后,等待 10ms 再按主键(减少延迟以提高播放速度)
+    if !modifiers.is_empty() {
+        thread::sleep(Duration::from_millis(10));
     }
 
     // 按下主键
@@ -126,8 +212,8 @@ fn simulate_keypress(enigo: &mut Enigo, key_str: &str, duration: f64) -> Result<
                     .raw(keycode, Direction::Press)
                     .map_err(|e| format!("Failed to press key: {:?}", e))?;
 
-                // 持续时间
-                thread::sleep(Duration::from_millis((duration * 1000.0).max(50.0) as u64));
+                // 最小延迟以确保按键被识别(不使用 duration,让播放时间由播放循环控制)
+                thread::sleep(Duration::from_millis(1));
 
                 // 释放主键
                 enigo
@@ -138,15 +224,35 @@ fn simulate_keypress(enigo: &mut Enigo, key_str: &str, duration: f64) -> Result<
             }
         }
 
-        // 在其他平台上使用 Unicode
-        #[cfg(not(target_os = "macos"))]
+        // 在 Windows 上使用扫描码以支持游戏的 DirectInput
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(scancode) = char_to_windows_scancode(ch) {
+                enigo
+                    .raw(scancode, Direction::Press)
+                    .map_err(|e| format!("Failed to press key: {:?}", e))?;
+
+                // 最小延迟以确保按键被识别(不使用 duration,让播放时间由播放循环控制)
+                thread::sleep(Duration::from_millis(1));
+
+                // 释放主键
+                enigo
+                    .raw(scancode, Direction::Release)
+                    .map_err(|e| format!("Failed to release key: {:?}", e))?;
+            } else {
+                return Err(format!("Unsupported character: {}", ch));
+            }
+        }
+
+        // 在其他平台(Linux等)上使用 Unicode
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             enigo
                 .key(Key::Unicode(ch), Direction::Press)
                 .map_err(|e| format!("Failed to press key: {:?}", e))?;
 
-            // 持续时间
-            thread::sleep(Duration::from_millis((duration * 1000.0).max(50.0) as u64));
+            // 最小延迟以确保按键被识别(不使用 duration,让播放时间由播放循环控制)
+            thread::sleep(Duration::from_millis(1));
 
             // 释放主键
             enigo
@@ -155,11 +261,38 @@ fn simulate_keypress(enigo: &mut Enigo, key_str: &str, duration: f64) -> Result<
         }
     }
 
-    // 释放修饰键（逆序）
+    // 主键释放后,等待 10ms 再释放修饰键(减少延迟以提高播放速度)
+    if !modifiers.is_empty() {
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    // 释放修饰键（逆序）,每个修饰键之间添加小延迟
     for modifier in modifiers.iter().rev() {
-        enigo
-            .key(*modifier, Direction::Release)
-            .map_err(|e| format!("Failed to release modifier: {:?}", e))?;
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: 使用扫描码以支持游戏的 DirectInput
+            if let Some(scancode) = modifier_to_windows_scancode(*modifier) {
+                enigo
+                    .raw(scancode, Direction::Release)
+                    .map_err(|e| format!("Failed to release modifier: {:?}", e))?;
+            } else {
+                // 如果没有扫描码映射,回退到普通方法
+                enigo
+                    .key(*modifier, Direction::Release)
+                    .map_err(|e| format!("Failed to release modifier: {:?}", e))?;
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // 其他平台:使用标准方法
+            enigo
+                .key(*modifier, Direction::Release)
+                .map_err(|e| format!("Failed to release modifier: {:?}", e))?;
+        }
+
+        // 修饰键之间延迟 30ms
+        thread::sleep(Duration::from_millis(30));
     }
 
     Ok(())

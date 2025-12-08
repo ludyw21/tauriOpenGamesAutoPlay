@@ -34,4 +34,4 @@ enigo = "0.2.1"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4"
 rand = "0.8"
-rdev = "0.5.3"
+rdev = { version = "0.5.3", features = ["unstable_grab"] }

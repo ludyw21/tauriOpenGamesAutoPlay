@@ -58,7 +58,7 @@ const initLocalState = () => {
   localAnalyzerSettings.minNote = settings.analyzerSetting?.minNote || 48;
   localAnalyzerSettings.maxNote = settings.analyzerSetting?.maxNote || 83;
   localAnalyzerSettings.blackKeyMode = settings.analyzerSetting?.blackKeyMode || "support_black_key";
-  localAnalyzerSettings.trimLongNotes = settings.analyzerSetting?.trimLongNotes || false;
+  localAnalyzerSettings.trimLongNotes = settings.analyzerSetting?.trimLongNotes ?? false;
 
   localSimulationSettings.simulationType = settings.simulationSettings?.simulationType || "keyboard";
   localSimulationSettings.noteToKey = { ...(settings.simulationSettings?.noteToKey || {}) };
@@ -287,12 +287,17 @@ const saveSettings = async () => {
     }
   }
 
-  // 更新本地状态中的 noteToKey，以便保存
+  // 更新本地状态中的 noteToKey,以便保存
   localSimulationSettings.noteToKey = fullNoteToKey;
 
+  // 保留原有的 noteToMouse 配置(不清空鼠标坐标设置)
+  const currentSettings = settingsManager.getSettings();
   const settings = {
     analyzerSetting: { ...localAnalyzerSettings },
-    simulationSettings: { ...localSimulationSettings },
+    simulationSettings: {
+      ...localSimulationSettings,
+      noteToMouse: currentSettings.simulationSettings?.noteToMouse || {}
+    },
     shortcuts: { ...localShortcuts },
     themeSettings: { ...localThemeSettings }
   };
@@ -506,7 +511,7 @@ const pickCoordinate = async (note: number) => {
                 </label>
                 <span class="switch-label">{{ localAnalyzerSettings.blackKeyMode === 'support_black_key' ? '支持黑键' :
                   '黑键降音'
-                }}</span>
+                  }}</span>
               </div>
 
               <!-- 长音修剪开关 -->
