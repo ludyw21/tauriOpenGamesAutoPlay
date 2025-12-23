@@ -61,7 +61,8 @@ class SettingsManager {
     },
     simulationSettings: {
       simulationType: 'keyboard',
-      noteToKey: {}
+      noteToKey: {},
+      noteToMouse: {}
     },
     shortcuts: { ...CONTROL_KEYS },
     midiFolderPath: undefined,

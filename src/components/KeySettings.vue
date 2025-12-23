@@ -122,7 +122,9 @@ const initLocalState = () => {
 };
 
 // 组件挂载时加载设置
-onMounted(() => {
+onMounted(async () => {
+  // 等待settingsManager初始化完成
+  await settingsManager.initialize();
   initLocalState();
   info("[KeySettings.vue] 加载按键设置");
 });
@@ -423,7 +425,7 @@ const saveSettings = async () => {
                 <span class="slider round"></span>
               </label>
               <span class="switch-label">{{ localAnalyzerSettings.blackKeyMode === 'support_black_key' ? '支持黑键' : '黑键降音'
-              }}</span>
+                }}</span>
             </div>
 
             <!-- 长音修剪开关 -->
