@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { info, error } from '@tauri-apps/plugin-log';
 import { getNoteName, groupForNote } from "../config/groups";
 
+
 const props = defineProps({
   selectedMidiFile: { type: [String, null], default: null },
 });
@@ -21,6 +22,7 @@ onMounted(() => {
   const settings = settingsManager.getSettings();
   currentMinNote.value = settings.analyzerSetting?.minNote || 48;
   currentMaxNote.value = settings.analyzerSetting?.maxNote || 83;
+  checkLockedWindow();
 });
 
 // 组件卸载时清理
@@ -903,10 +905,89 @@ defineExpose({
   midiEvents
 });
 
+
+// 窗口锁定功能
+const lockedWindow = ref<any>(null);
+const isWindowSelectorVisible = ref(false);
+const availableWindows = ref<any[]>([]);
+
+const checkLockedWindow = async () => {
+  try {
+    const win = await invoke('get_locked_window');
+    lockedWindow.value = win;
+  } catch (e) {
+    error(`[RightPanel.vue] 获取锁定窗口失败: ${e}`);
+  }
+};
+
+const openWindowSelector = async () => {
+  try {
+    const windows: any[] = await invoke('get_windows');
+    // 过滤掉当前应用窗口(可选)
+    availableWindows.value = windows.filter(w => w.title && w.title.length > 0);
+    isWindowSelectorVisible.value = true;
+  } catch (e) {
+    error(`[RightPanel.vue] 获取窗口列表失败: ${e}`);
+    alert(`获取窗口列表失败: ${e}`);
+  }
+};
+
+const selectWindow = async (win: any) => {
+  try {
+    await invoke('lock_window', { window: win });
+    lockedWindow.value = win;
+    isWindowSelectorVisible.value = false;
+    info(`[RightPanel.vue] 已锁定窗口: ${win.title}`);
+  } catch (e) {
+    error(`[RightPanel.vue] 锁定窗口失败: ${e}`);
+  }
+};
+
+const unlockCurrentWindow = async () => {
+  try {
+    await invoke('unlock_window');
+    lockedWindow.value = null;
+    info('[RightPanel.vue] 已解除窗口锁定');
+  } catch (e) {
+    error(`[RightPanel.vue] 解锁窗口失败: ${e}`);
+  }
+};
+
 </script>
 
 <template>
   <section class="right-panel">
+    <!-- 窗口锁定区域 -->
+    <div class="window-lock-frame">
+      <div class="lock-status">
+        <span class="label">锁定窗口:</span>
+        <span class="value" :title="lockedWindow?.title || '未锁定'">
+          {{ lockedWindow ? (lockedWindow.title.length > 15 ? lockedWindow.title.substring(0, 15) + '...' : lockedWindow.title) : "未锁定" }}
+        </span>
+      </div>
+      <button v-if="!lockedWindow" class="btn btn-small btn-lock" @click="openWindowSelector">锁定</button>
+      <button v-else class="btn btn-small btn-unlock" @click="unlockCurrentWindow">解锁</button>
+    </div>
+
+    <!-- 窗口选择弹窗 (覆盖层) -->
+    <div v-if="isWindowSelectorVisible" class="window-selector-overlay" @click.self="isWindowSelectorVisible = false">
+      <div class="window-selector-modal">
+        <div class="modal-header">
+          <h3>选择要锁定的窗口</h3>
+          <button class="close-btn" @click="isWindowSelectorVisible = false">×</button>
+        </div>
+        <div class="window-list">
+          <div v-for="win in availableWindows" :key="win.id" class="window-item" @click="selectWindow(win)">
+            <img v-if="win.icon" :src="`data:image/png;base64,${win.icon}`" class="window-icon" />
+            <div class="window-info">
+              <div class="window-title">{{ win.title }}</div>
+              <div class="window-app">{{ win.app_name }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="scrollable-content">
       <!-- 音轨详情区域 -->
       <div class="tracks-frame">
@@ -1368,5 +1449,147 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+}
+
+/* 窗口锁定区域样式 */
+.window-lock-frame {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.lock-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.lock-status .label {
+  font-size: 0.9rem;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.lock-status .value {
+  font-size: 0.9rem;
+  color: var(--primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-lock {
+  background-color: var(--primary);
+  color: var(--text-on-primary, white);
+  border-color: var(--primary);
+}
+
+.btn-unlock {
+  background-color: var(--secondary);
+  color: white;
+  border-color: var(--secondary);
+}
+
+/* 窗口选择弹窗 */
+.window-selector-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.window-selector-modal {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 400px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--fg);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.window-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.window-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-light, #eee);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.window-item:hover {
+  background-color: var(--active);
+}
+
+.window-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.window-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  overflow: hidden;
+}
+
+.window-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-app {
+  font-size: 0.8rem;
+  color: var(--secondary);
 }
 </style>

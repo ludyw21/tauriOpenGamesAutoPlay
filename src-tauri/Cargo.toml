@@ -30,11 +30,13 @@ tauri-plugin-global-shortcut = "2.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1" 
 midly = "0.5.3"
-enigo = "0.2.1"
+enigo = "0.6.1"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4"
 rand = "0.8"
 rdev = { version = "0.5.3", features = ["unstable_grab"] }
+uni-input = { path = "crates/uni-input" }
+uni-window = { path = "crates/uni-window" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_UI_WindowsAndMessaging"] }

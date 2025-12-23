@@ -1,0 +1,11 @@
+[package]
+name = "uni-input"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+enigo = "0.6.1"
+thiserror = "1.0"
+uni-window = { path = "../uni-window" }
+rand = "0.8"
+lazy_static = "1.4"

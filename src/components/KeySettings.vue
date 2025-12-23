@@ -4,6 +4,7 @@ import { info, error } from '@tauri-apps/plugin-log';
 import { GROUPS, NOTE_NAMES, getNoteName } from "../config/groups";
 import { NOTE_TO_KEY } from "../config/keyboard_mapping";
 import Toast from "./common/Toast.vue";
+import HotkeyInput from "./HotkeyInput.vue";
 
 // 从 App.vue 注入 settingsManager
 const settingsManager = inject('settingsManager') as any;
@@ -463,8 +464,11 @@ const saveSettings = async () => {
             <div class="group-notes">
               <div v-for="note in group.notes" :key="note.note" class="note-item-horizontal">
                 <label>{{ note.name }}</label>
-                <input type="text" class="key-input" :value="note.key"
-                  @input="e => updateNoteKey(note.note, (e.target as HTMLInputElement).value)" placeholder="未设置">
+                <HotkeyInput 
+                  :model-value="note.key"
+                  @update:model-value="(val: string) => updateNoteKey(note.note, val)" 
+                  placeholder="点击设置" 
+                />
               </div>
             </div>
           </div>
